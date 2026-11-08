@@ -5,7 +5,7 @@ email with a personal code and a link, then opens the page and sees who
 they're buying for.
 
 - **Front end:** static files hosted for free on **GitHub Pages**
-  (`index.html`, `style.css`, `art.js`, `app.js`, `config.js`).
+  (`index.html`, `style.css`, `art.js`, `app.js`, `music.js`, `config.js`).
 - **Back end:** one **Google Apps Script** file (`apps-script/Code.gs`).
   It's free, it stores the list and the draw, and it sends the emails
   **from your own Gmail** (up to about 100 a day on a normal Gmail account).
@@ -85,3 +85,8 @@ need to change.
 - One email address can ask for its code up to 3 times in 6 hours.
 - **Clear the draw** (Organiser page) starts over. Old codes stop working, and
   the list of people is kept.
+- **Music:** a music-box "Jingle Bells" (public domain), played by the browser itself
+  (`music.js`, no audio files). Browsers only allow sound after a tap, so it starts on
+  the visitor's first tap. The round 🎵 button in the corner turns it on or off, and the
+  page remembers that choice.
+- The page is built for phones first. Every screen was checked at 320px and 375px widths.
