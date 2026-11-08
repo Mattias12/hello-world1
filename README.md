@@ -59,7 +59,7 @@ window.SECRET_SANTA_API = "https://script.google.com/macros/s/AKfy…/exec";
 ### 3. Turn on GitHub Pages
 
 In the repository on GitHub, go to **Settings → Pages**. Under *Source*, pick
-**Deploy from a branch**, branch **main**, folder **/ (root)**, then **Save**.
+**Deploy from a branch**, branch **master**, folder **/ (root)**, then **Save**.
 After a minute the site is live at
 `https://<your-username>.github.io/<repo-name>/`.
 
