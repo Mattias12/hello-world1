@@ -22,7 +22,7 @@ No paid services, no servers to run, no API keys.
    let people ask for their own code.
 3. Each person enters their email and clicks **Email me my code**. They get an
    email with their code and a link back to the page with the code filled in.
-4. They click **Open my present**, and the gift opens to show their match.
+4. They click **Your Secret Santa**, and the gift opens to show their match.
 
 The app never shows who has whom, so you can play too. The draw is stored in
 your Apps Script's *Script Properties*. Don't look there!

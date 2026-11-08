@@ -108,7 +108,7 @@ function mainHTML() {
   <p>${bi("Enter the code from your email.", "Skriv in koden från ditt mejl.")}</p>
   <form id="revealForm" style="display:flex;flex-direction:column;gap:14px">
     <label for="code">${bil("Your code", "Din kod")}<input id="code" class="code-input" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" maxlength="12" required value="${esc(fmtCode(urlCode))}"></label>
-    <button class="primary big" type="submit" id="revealBtn">${bil("Open my present", "Öppna min julklapp")}</button>
+    <button class="primary big" type="submit" id="revealBtn">${bil("Your Secret Santa", "Din Secret Santa")}</button>
   </form>${flashHTML("reveal")}<div id="tagOut" aria-live="polite"></div></section>`;
   return (codeFirst ? rev + ask : ask + rev) + organiserLink();
 }

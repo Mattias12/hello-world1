@@ -200,7 +200,7 @@ function sendCodeEmail(s, p) {
     '<p style="margin:0 0 18px;color:#BCD0C3;font-style:italic">Hej ' + h(p.name) + '! Namnen är dragna.</p>' +
     '<div style="font-size:13px;color:#BCD0C3">Your code · Din kod</div>' +
     '<div style="font-family:Menlo,Consolas,monospace;font-size:28px;letter-spacing:.16em;color:#F2C14E;margin:4px 0 20px">' + h(p.code) + '</div>' +
-    '<a href="' + h(link) + '" style="display:inline-block;background:#D7263D;color:#FBF7EE;text-decoration:none;font-weight:bold;padding:14px 22px;border-radius:12px">Open my present · Öppna min julklapp</a>' +
+    '<a href="' + h(link) + '" style="display:inline-block;background:#D7263D;color:#FBF7EE;text-decoration:none;font-weight:bold;padding:14px 22px;border-radius:12px">Your Secret Santa · Din Secret Santa</a>' +
     (extra.length ? '<p style="margin:20px 0 0;color:#BCD0C3;font-size:14px">' + extra.map(h).join('<br>') + '</p>' : '') +
     '<p style="margin:20px 0 0">Keep it secret! · Håll det hemligt!<br>God Jul! 🎄</p></div>';
 
