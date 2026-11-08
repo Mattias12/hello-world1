@@ -82,6 +82,6 @@ need to change.
 ## Notes
 
 - Emails can land in spam the first time. Tell people to check there.
-- One email address can ask for its code up to 5 times in 6 hours.
+- One email address can ask for its code up to 3 times in 6 hours.
 - **Clear the draw** (Organiser page) starts over. Old codes stop working, and
   the list of people is kept.

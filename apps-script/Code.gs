@@ -11,7 +11,7 @@ const ADMIN_PASSWORD = 'change-me-please';
 // Shown as the sender name on the emails.
 const FROM_NAME = 'Secret Santa';
 // How many times one email address can ask for its code within 6 hours.
-const MAX_SENDS_PER_EMAIL = 5;
+const MAX_SENDS_PER_EMAIL = 3;
 
 const ALPHA = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const STATE_KEY = 'state';
