@@ -132,3 +132,48 @@ body{margin:0}
 .ok-t{color:var(--ok);font-size:14px}
 td.email{color:var(--muted);font-size:14px;overflow-wrap:anywhere}
 input[type=checkbox]{accent-color:var(--red);width:20px;height:20px}
+
+/* ---------- mobile polish ---------- */
+/* iOS ignores background-attachment:fixed, which left a seam; paint the night sky on a fixed layer instead */
+html{background:var(--night)}
+body{background:transparent}
+body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:radial-gradient(120% 70% at 50% -10%,#1B4A3B 0%,var(--night-2) 45%,var(--night) 100%)}
+body{-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent;overflow-x:hidden;
+  padding-top:max(20px,env(safe-area-inset-top,0px));padding-bottom:max(96px,calc(env(safe-area-inset-bottom,0px) + 88px))}
+button,.btn,input,select,label{touch-action:manipulation}
+button,.btn{min-height:44px}
+.link{min-height:44px}
+/* bilingual labels on big buttons: English on top, Swedish underneath, never split mid-phrase */
+.primary .bil,.big .bil{display:flex;flex-direction:column;align-items:center;line-height:1.2;gap:2px}
+.primary .bil .dot,.big .bil .dot{display:none}
+.primary .sv-inline,.big .sv-inline{font-family:var(--body);font-size:.78em;font-weight:500}
+.bil{overflow-wrap:anywhere}
+/* checkbox row */
+.check{flex-direction:row;align-items:center;gap:12px;color:var(--snow);font-weight:500;cursor:pointer}
+.check input{width:22px;height:22px;flex:0 0 auto}
+/* who has been sent a code: a list that works at any width */
+.sentlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.sentrow{display:grid;grid-template-columns:1fr auto;gap:2px 12px;padding:10px 0;border-bottom:1px solid var(--line);align-items:baseline}
+.sentrow .name{font-weight:600}
+.sentrow .email{grid-column:1/-1;color:var(--muted);font-size:14px;overflow-wrap:anywhere}
+.sentrow .ok-t,.sentrow .not-sent{font-size:13px;text-align:right}
+/* participants: each person is a small card on phones */
+@media (max-width:480px){
+  body{padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}
+  .wrap{gap:18px}
+  .panel{padding:18px 16px;border-radius:16px}
+  .person{grid-template-columns:1fr auto;grid-template-areas:"nm x" "em em";gap:8px;padding:10px;border:1px solid var(--line);border-radius:14px;background:rgba(0,0,0,.15)}
+  .person .nm{grid-area:nm}.person .em{grid-area:em}.person .x{grid-area:x;height:46px}
+  .tag{padding:42px 18px 22px}
+  .stage{min-height:200px}
+  h2{font-size:21px}
+}
+/* music toggle */
+#musicBtn{position:fixed;z-index:60;right:max(14px,env(safe-area-inset-right,0px));bottom:max(14px,calc(env(safe-area-inset-bottom,0px) + 10px));
+  width:52px;height:52px;border-radius:50%;padding:0;border:2px solid var(--gold);background:var(--red);color:var(--snow);
+  box-shadow:0 4px 0 var(--red-deep),0 8px 20px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;cursor:pointer}
+#musicBtn[aria-pressed="false"]{background:var(--surface-2);color:var(--muted)}
+#musicBtn[aria-pressed="true"] svg{animation:bob 1.1s ease-in-out infinite}
+@keyframes bob{50%{transform:translateY(-2px) rotate(-6deg)}}
+@media (prefers-reduced-motion:reduce){#musicBtn svg{animation:none!important}}

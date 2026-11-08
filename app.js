@@ -19,7 +19,7 @@ let revealed = false;
 /* ---------- helpers ---------- */
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const bi = (en, sv) => `<span class="en">${en}</span><span class="sv" lang="sv">${sv}</span>`;
-const bil = (en, sv) => `<span class="bil">${en} <span class="sv-inline" lang="sv">· ${sv}</span></span>`;
+const bil = (en, sv) => `<span class="bil">${en} <span class="sv-inline" lang="sv"><span class="dot">· </span>${sv}</span></span>`;
 const fmtCode = s => { const c = String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8); return c.length > 4 ? c.slice(0, 4) + "-" + c.slice(4) : c; };
 function setFlash(kind, en, sv, where) { flash = { kind, en, sv, where: where || "" }; }
 function flashHTML(where) { return flash && flash.where === (where || "") ? `<div class="msg ${flash.kind}" role="status">${bi(esc(flash.en), esc(flash.sv))}</div>` : ""; }
@@ -101,13 +101,13 @@ function mainHTML() {
   const ask = `<section class="panel${codeFirst ? "" : " festive"}" id="askPanel"><h2>${bi(codeFirst ? "Lost your code?" : "1. Get your code", codeFirst ? "Tappat bort koden?" : "1. Hämta din kod")}</h2>
   <p>${bi("Enter your email address and we'll send you your personal code and a link back here.", "Skriv in din e-postadress så skickar vi din personliga kod och en länk tillbaka hit.")}</p>
   <form id="askForm" style="display:flex;flex-direction:column;gap:14px">
-    <label for="email">${bil("Your email", "Din e-post")}<input id="email" type="email" autocomplete="email" inputmode="email" required placeholder="you@example.com"></label>
+    <label for="email">${bil("Your email", "Din e-post")}<input id="email" type="email" autocomplete="email" inputmode="email" enterkeyhint="send" autocapitalize="off" spellcheck="false" required placeholder="you@example.com"></label>
     <button class="${codeFirst ? "ghost" : "primary"} big" type="submit" id="askBtn">${bil("Email me my code", "Mejla min kod")}</button>
   </form>${flashHTML("ask")}</section>`;
   const rev = `<section class="panel${codeFirst ? " festive" : ""}" id="revealPanel"><h2>${bi(codeFirst ? "Who are you buying for?" : "2. Open your present", codeFirst ? "Vem ska du köpa till?" : "2. Öppna ditt paket")}</h2>
   <p>${bi("Enter the code from your email.", "Skriv in koden från ditt mejl.")}</p>
   <form id="revealForm" style="display:flex;flex-direction:column;gap:14px">
-    <label for="code">${bil("Your code", "Din kod")}<input id="code" class="code-input" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" maxlength="12" required value="${esc(fmtCode(urlCode))}"></label>
+    <label for="code">${bil("Your code", "Din kod")}<input id="code" class="code-input" autocomplete="one-time-code" enterkeyhint="go" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" maxlength="12" required value="${esc(fmtCode(urlCode))}"></label>
     <button class="primary big" type="submit" id="revealBtn">${bil("Your Secret Santa", "Din Secret Santa")}</button>
   </form>${flashHTML("reveal")}<div id="tagOut" aria-live="polite"></div></section>`;
   return (codeFirst ? rev + ask : ask + rev) + organiserLink();
@@ -124,7 +124,7 @@ function unlockHTML() {
 
 function personRow(p) {
   return `<div class="person" data-row><input aria-label="Name / Namn" class="nm" placeholder="Name / Namn" value="${esc(p.name || "")}">
-  <input aria-label="Email / E-post" class="em" type="email" placeholder="Email / E-post" value="${esc(p.email || "")}">
+  <input aria-label="Email / E-post" class="em" type="email" inputmode="email" autocomplete="off" placeholder="Email / E-post" value="${esc(p.email || "")}">
   <button class="x" title="Remove / Ta bort" aria-label="Remove person" data-act="rm">×</button></div>`;
 }
 
@@ -145,7 +145,7 @@ function adminSetupHTML() {
   <button class="ghost small" data-act="saveSetup" id="saveBtn">${bil("Save list", "Spara listan")}</button></div></section>
   <section class="panel"><h2>${bi("Draw the names", "Dra namnen")}</h2>
   <p class="muted">${bi("The server draws the names. Nobody, including you, sees who has whom in this app.", "Servern drar namnen. Ingen, inte ens du, ser vem som har vem i appen.")}</p>
-  <label style="flex-direction:row;align-items:center;gap:10px;color:var(--snow);font-weight:500"><input type="checkbox" id="notify" checked style="width:auto">
+  <label class="check"><input type="checkbox" id="notify" checked>
   ${bil("Email everyone their code right away", "Mejla allas koder direkt")}</label>
   ${flashHTML()}
   <button class="primary big" data-act="draw" id="drawBtn">${bil("Draw names and lock it in", "Dra namnen och lås")}</button>
@@ -155,13 +155,13 @@ function adminSetupHTML() {
 function adminDrawnHTML() {
   const when = t => t ? esc(new Date(t).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })) : "";
   const checks = (admin.checks || []).map(c => `<li class="${c.ok ? "" : "bad"}">${esc(c.en)} <span class="sv-inline" lang="sv">· ${esc(c.sv)}</span></li>`).join("");
-  const rows = admin.people.map(p => `<tr><td>${esc(p.name)}</td><td class="email">${esc(p.email)}</td><td>${p.sentAt ? `<span class="ok-t">✓ ${when(p.sentAt)}</span>` : `<span class="muted">—</span>`}</td></tr>`).join("");
+  const rows = admin.people.map(p => `<li class="sentrow"><span class="name">${esc(p.name)}</span>${p.sentAt ? `<span class="ok-t">✓ ${when(p.sentAt)}</span>` : `<span class="muted not-sent">${bil("Not sent", "Ej skickad")}</span>`}<span class="email">${esc(p.email)}</span></li>`).join("");
   return `<section class="panel festive"><h2>${bi("Names are drawn", "Namnen är dragna")}</h2>${flashHTML()}<ul class="checks">${checks}</ul>
     <p class="muted" style="font-size:14px">${bil("Drawn", "Dragen")} ${when(admin.drawnAt)}</p>
     <p>${bi("Share this link with everyone. They enter their email and get their code:", "Dela länken med alla. De skriver in sin e-post och får sin kod:")}</p>
     <div class="mailtext" style="font-size:15px">${esc(admin.appUrl)}</div></section>
   <section class="panel"><h2>${bi("Codes emailed", "Skickade koder")}</h2>
-    <div class="tablewrap"><table><thead><tr><th>${bil("Name", "Namn")}</th><th>${bil("Email", "E-post")}</th><th>${bil("Last sent", "Senast skickad")}</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <ul class="sentlist">${rows}</ul>
     <p class="muted" style="font-size:14px">${bi(`Gmail can still send ${admin.quota} emails today.`, `Gmail kan skicka ${admin.quota} mejl till i dag.`)}</p>
     <div class="actions"><button class="ghost small" data-act="emailAll" id="emailAllBtn">${bil("Email everyone their code", "Mejla allas koder")}</button></div></section>
   <section class="panel"><h2>${bi("Start over", "Börja om")}</h2>
