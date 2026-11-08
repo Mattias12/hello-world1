@@ -1,0 +1,134 @@
+/* Layout: a Christmas-night card — snowy scene up top, one column of frosted panels, a gift that bursts open on reveal.
+   Deliberately one look (a snowy night) in every theme. */
+:root{
+  --night:#0B1F1A; --night-2:#0F2C24; --surface:#133A2F; --surface-2:#184637; --line:#2E5E4D;
+  --snow:#FBF7EE; --muted:#BCD0C3; --red:#D7263D; --red-deep:#A51C30; --gold:#F2C14E; --gold-soft:#F7DA8E;
+  --green:#2F9A62; --green-deep:#1D6B43; --skin:#F6CBA9; --brown:#8C5A38; --brown-deep:#5E3B23;
+  --tag:#FFF6E2; --tag-ink:#3A2A12; --err:#FF8A96; --ok:#7EE0A6;
+  --display:"Fredoka",ui-rounded,"Arial Rounded MT Bold",system-ui,sans-serif;
+  --body:"Figtree",ui-sans-serif,system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+html{background:var(--night)}
+body{background:radial-gradient(120% 70% at 50% -10%,#1B4A3B 0%,var(--night-2) 45%,var(--night) 100%) fixed,var(--night);color:var(--snow);font-family:var(--body);font-size:16px;line-height:1.5;min-height:100vh;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 56px}
+*{box-sizing:border-box}
+#snow{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:0}
+#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:50}
+.wrap{position:relative;z-index:1;max-width:580px;margin:0 auto;display:flex;flex-direction:column;gap:24px}
+header{display:flex;flex-direction:column;gap:4px;text-align:center;align-items:center}
+.scene{width:100%;max-width:100%;height:auto;display:block;margin-bottom:-6px}
+.eyebrow{font-family:var(--display);font-size:14px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);font-weight:600}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(34px,9vw,52px);line-height:1.02;margin:0;text-wrap:balance;color:var(--snow);text-shadow:0 3px 0 var(--red-deep)}
+h2{font-family:var(--display);font-weight:600;font-size:23px;margin:0;text-wrap:balance;color:var(--gold-soft)}
+.meta{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:8px}
+.chip{font-size:14px;border:1px solid var(--gold);border-radius:999px;padding:3px 12px;color:var(--gold-soft);background:rgba(0,0,0,.18)}
+.lights{width:100%;height:30px;display:block}
+.lights .bulb{animation:twinkle 1.6s ease-in-out infinite}
+.lights .bulb:nth-child(3n){animation-delay:.5s}.lights .bulb:nth-child(3n+1){animation-delay:1s}
+@keyframes twinkle{50%{opacity:.35}}
+p{margin:0}
+.muted{color:var(--muted)}
+.panel{background:linear-gradient(180deg,var(--surface-2),var(--surface));border:1px solid var(--line);border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.panel.festive{border:2px solid var(--gold);position:relative}
+.panel.festive::after{content:"";position:absolute;top:-12px;right:22px;width:26px;height:26px;background:var(--red);border-radius:50%;box-shadow:inset -4px -4px 0 var(--red-deep),0 0 0 3px var(--gold)}
+label{display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:600;min-width:0;color:var(--muted)}
+input,select{font:inherit;font-size:16px;color:var(--snow);background:var(--night);border:1px solid var(--line);border-radius:12px;padding:11px 12px;width:100%;min-width:0}
+input::placeholder{color:#7F988A}
+input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.code-input{font-family:var(--mono);letter-spacing:.16em;text-transform:uppercase;font-size:20px;text-align:center}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:480px){.row2{grid-template-columns:1fr}}
+button,.btn{font:inherit;font-weight:600;font-size:16px;border-radius:12px;padding:12px 18px;cursor:pointer;border:1px solid transparent;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.primary{background:var(--red);color:var(--snow);box-shadow:0 4px 0 var(--red-deep);font-family:var(--display);font-size:18px;letter-spacing:.02em}
+.primary:hover{filter:brightness(1.07)}
+.primary:active{transform:translateY(2px);box-shadow:0 2px 0 var(--red-deep)}
+.primary:disabled{opacity:.6;cursor:progress}
+.big{width:100%;padding:15px 18px}
+.ghost{background:transparent;color:var(--snow);border-color:var(--line)}
+.small{font-size:14px;padding:7px 11px;border-radius:9px}
+.link{background:none;border:none;color:var(--muted);padding:0;font-weight:500;text-decoration:underline;text-underline-offset:3px}
+.danger{color:var(--err);border-color:var(--err);background:transparent}
+.msg{font-size:14px;padding:10px 12px;border-radius:10px;background:rgba(0,0,0,.2);border:1px solid var(--line)}
+.msg.err{color:var(--err);border-color:var(--err)}
+.msg.ok{color:var(--ok);border-color:var(--ok)}
+.people{display:flex;flex-direction:column;gap:10px}
+.person{display:grid;grid-template-columns:1fr 1.4fr auto;gap:8px;align-items:center}
+@media (max-width:480px){.person{grid-template-columns:1fr auto}.person .em{grid-column:1/2}}
+.x{background:none;border:1px solid var(--line);color:var(--muted);width:42px;height:46px;border-radius:12px;padding:0;font-size:18px}
+.actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.foot{display:flex;justify-content:center}
+.waiting{display:flex;gap:16px;align-items:center}
+.waiting svg{flex:0 0 auto;width:86px;height:auto}
+@media (max-width:420px){.waiting{flex-direction:column;text-align:center}}
+/* reveal stage */
+.stage{display:flex;flex-direction:column;align-items:center;gap:10px;padding:8px 0 4px;min-height:240px;justify-content:center}
+.giftbox{width:150px;height:auto;overflow:visible}
+.giftbox.shake{animation:shake .9s ease-in-out}
+.giftbox .lid{transform-origin:75px 52px;transform-box:view-box}
+.giftbox.open .lid{animation:lidpop .7s cubic-bezier(.2,.8,.3,1) forwards}
+.giftbox.open{animation:boxfade .5s .45s ease forwards}
+@keyframes shake{0%,100%{transform:rotate(0)}15%{transform:rotate(-8deg)}30%{transform:rotate(7deg)}45%{transform:rotate(-6deg)}60%{transform:rotate(5deg)}75%{transform:rotate(-3deg)}}
+@keyframes lidpop{to{transform:translate(40px,-90px) rotate(35deg);opacity:0}}
+@keyframes boxfade{to{opacity:0;transform:scale(.85)}}
+.stage .hint{font-family:var(--display);color:var(--gold-soft);font-size:18px}
+.tagwrap{display:flex;justify-content:center;padding:10px 0 4px}
+.tag{position:relative;background:var(--tag);color:var(--tag-ink);width:min(330px,100%);padding:46px 24px 26px;
+  clip-path:polygon(18% 0,82% 0,100% 14%,100% 100%,0 100%,0 14%);transform:rotate(-2deg);
+  display:flex;flex-direction:column;gap:6px;text-align:center;animation:swing 1s cubic-bezier(.2,.9,.3,1.3) both;
+  background-image:repeating-linear-gradient(135deg,transparent 0 14px,rgba(215,38,61,.06) 14px 20px)}
+.tag::before{content:"";position:absolute;top:14px;left:50%;width:16px;height:16px;margin-left:-8px;border-radius:50%;background:var(--night);box-shadow:inset 0 0 0 3px var(--gold)}
+.tag .lbl{font-size:13px;letter-spacing:.16em;text-transform:uppercase;opacity:.7;font-weight:600}
+.tag .who{font-family:var(--display);font-weight:700;font-size:clamp(34px,10vw,46px);line-height:1.1;color:var(--red);overflow-wrap:anywhere}
+.tag .who span{display:inline-block;animation:pop .5s cubic-bezier(.2,.9,.3,1.6) both}
+.tag .from{font-size:14px;opacity:.75;margin-top:6px}
+.tag .holly{display:block;margin:2px auto 0}
+@keyframes swing{0%{transform:rotate(-14deg) translateY(-30px) scale(.6);opacity:0}60%{transform:rotate(3deg) scale(1.03);opacity:1}100%{transform:rotate(-2deg)}}
+@keyframes pop{0%{transform:translateY(14px) scale(.3);opacity:0}100%{transform:none;opacity:1}}
+.after{text-align:center;font-size:14px}
+.sendlist{display:flex;flex-direction:column;gap:12px}
+.send{border:1px solid var(--line);background:rgba(0,0,0,.15);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.send .top{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline}
+.send .name{font-weight:600}
+.send .email{color:var(--muted);font-size:14px;user-select:all;overflow-wrap:anywhere}
+.codebadge{font-family:var(--mono);font-size:15px;letter-spacing:.12em;user-select:all;color:var(--gold)}
+.mailtext{width:100%;font-size:13px;background:var(--night);border:1px dashed var(--line);border-radius:8px;padding:8px;white-space:pre-wrap;user-select:all;color:var(--muted)}
+.checks{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px;font-size:15px}
+.checks li::before{content:"✓  ";color:var(--ok);font-weight:700}
+.checks li.bad::before{content:"✕  ";color:var(--err)}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:15px}
+td,th{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line)}
+th{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.arrow{color:var(--gold);width:28px;text-align:center}
+.chain{font-size:14px;color:var(--muted);overflow-wrap:anywhere}
+/* scene svg parts */
+.sky-star{fill:var(--gold-soft);animation:twinkle 2.4s ease-in-out infinite}
+.sky-star:nth-of-type(2n){animation-delay:1.2s}
+.moon{fill:#FFF3C9}
+.hill{fill:#E9F1EE}.hill2{fill:#D3E2DC}
+.tree{fill:var(--green)}.tree-d{fill:var(--green-deep)}.trunk{fill:var(--brown-deep)}
+.star{fill:var(--gold)}.bauble-r{fill:var(--red)}.bauble-g{fill:var(--gold)}
+.santa-red{fill:var(--red)}.santa-dark{fill:var(--red-deep)}.fur{fill:#FFFFFF}.skin{fill:var(--skin)}.ink{fill:#2A1B12}.cheek{fill:#F29A9A}.belt{fill:#22160F}.buckle{fill:var(--gold)}
+.deer{fill:var(--brown)}.deer-d{fill:var(--brown-deep)}.antler{stroke:#D9B48A;stroke-width:3;stroke-linecap:round;fill:none}.nose{fill:#FF3B4E}
+.sleigh-sil{fill:#0B1F1A;opacity:.85}
+.sleigh{animation:fly 16s linear infinite}
+@keyframes fly{0%{transform:translate(-200px,40px)}100%{transform:translate(720px,-20px)}}
+.wave{animation:wave 2.2s ease-in-out infinite;transform-origin:120px 140px;transform-box:view-box}
+@keyframes wave{0%,100%{transform:rotate(0)}50%{transform:rotate(-14deg)}}
+@media (prefers-reduced-motion:reduce){
+  .sleigh,.wave,.lights .bulb,.sky-star,.tag,.tag .who span,.giftbox.shake{animation:none}
+  .sleigh{transform:translate(330px,10px)}
+}
+.en{display:block}
+.sv{display:block;color:var(--muted);font-style:italic;margin-top:3px}
+h2 .sv{font-size:.68em;font-weight:500;font-style:normal;color:var(--muted);margin-top:2px}
+.msg .sv{color:inherit;opacity:.85}
+.sv-inline{font-weight:500;opacity:.78}
+.primary .sv-inline{opacity:.85}
+/* additions for the hosted version */
+body{margin:0}
+.ok-t{color:var(--ok);font-size:14px}
+td.email{color:var(--muted);font-size:14px;overflow-wrap:anywhere}
+input[type=checkbox]{accent-color:var(--red);width:20px;height:20px}
