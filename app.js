@@ -69,7 +69,7 @@ function busy(btn, en, sv) { const orig = btn.innerHTML; btn.disabled = true; bt
 function headerHTML() {
   const s = (admin || STATUS || {});
   const chips = [s.budget && `Budget: ${esc(s.budget)}`, s.when && esc(s.when)].filter(Boolean).map(c => `<span class="chip">${c}</span>`).join("");
-  return `<header>${sceneSVG()}<span class="eyebrow">Secret Santa</span><h1>${esc(s.eventName || "Family Secret Santa")}</h1>${chips ? `<div class="meta">${chips}</div>` : ""}${lightsSVG()}</header>`;
+  return `<header>${sceneSVG()}<span class="eyebrow">Secret Santa</span><h1>${esc(s.eventName || "Nordlander Family Secret Santa 2026")}</h1>${chips ? `<div class="meta">${chips}</div>` : ""}${lightsSVG()}</header>`;
 }
 const organiserLink = () => `<div class="foot"><button class="link" data-act="organiser">${bil("Organiser", "Arrangör")}</button></div>`;
 

@@ -239,7 +239,7 @@ function load() {
   const s = raw ? JSON.parse(raw) : {};
   s.status = s.status || 'setup';
   s.people = s.people || [];
-  s.eventName = s.eventName || 'Family Secret Santa ' + new Date().getFullYear();
+  s.eventName = s.eventName || 'Nordlander Family Secret Santa ' + new Date().getFullYear();
   s.budget = s.budget || '';
   s.when = s.when || '';
   s.appUrl = s.appUrl || '';
