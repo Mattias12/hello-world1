@@ -50,6 +50,7 @@ function route(req) {
     case 'reveal':      return reveal(req.code);
     case 'admin.get':   adminCheck(req.password); return adminView();
     case 'admin.save':  adminCheck(req.password); return adminSave(req);
+    case 'admin.details': adminCheck(req.password); return adminDetails(req);
     case 'admin.draw':  adminCheck(req.password); return adminDraw(req);
     case 'admin.emailAll': adminCheck(req.password); return adminEmailAll(req);
     case 'admin.reset': adminCheck(req.password); return adminReset();
@@ -114,6 +115,15 @@ function adminView(extra) {
     people: s.people.map(p => ({ name: p.name, email: p.email, sentAt: p.sentAt || null }))
   };
   return Object.assign(v, extra || {});
+}
+
+/** Event name, budget and date only. Allowed after the draw: it never touches people, codes or pairs. */
+function adminDetails(req) {
+  const s = load();
+  applySettings(s, { eventName: req.eventName, budget: req.budget, when: req.when });
+  if (!s.eventName) s.eventName = 'Secret Santa';
+  save(s);
+  return adminView();
 }
 
 function adminSave(req) {

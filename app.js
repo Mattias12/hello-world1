@@ -165,6 +165,12 @@ function adminDrawnHTML() {
     <ul class="sentlist">${rows}</ul>
     <p class="muted" style="font-size:14px">${bi(`Gmail can still send ${admin.quota} emails today.`, `Gmail kan skicka ${admin.quota} mejl till i dag.`)}</p>
     <div class="actions"><button class="ghost small" data-act="emailAll" id="emailAllBtn">${bil("Email everyone their code", "Mejla allas koder")}</button></div></section>
+  <section class="panel"><h2>${bi("Event details", "Detaljer")}</h2>
+    <p class="muted">${bi("Change the name, budget or date any time. The draw and everyone's codes stay the same.", "Ändra namn, budget eller datum när som helst. Dragningen och allas koder påverkas inte.")}</p>
+    <label for="dName">${bil("Event name", "Namn")}<input id="dName" value="${esc(admin.eventName || "")}"></label>
+    <div class="row2"><label for="dBudget">Budget<input id="dBudget" value="${esc(admin.budget || "")}"></label>
+    <label for="dWhen">${bil("Gift exchange", "Julklappsutdelning")}<input id="dWhen" value="${esc(admin.when || "")}"></label></div>
+    <div class="actions"><button class="ghost small" data-act="saveDetails" id="saveDetailsBtn">${bil("Save details", "Spara detaljer")}</button></div></section>
   <section class="panel"><h2>${bi("Everyone's codes", "Allas koder")}</h2>
     <p class="muted">${bi("Only names and codes, never who has whom. Careful: entering someone else's code on the page shows their match.", "Bara namn och koder, aldrig vem som har vem. Obs: skriver man in någon annans kod på sidan visas vem de har.")}</p>
     ${codes ? `<ul class="sentlist">${codes.map(c => `<li class="sentrow"><span class="name">${esc(c.name)}</span><span class="codebadge">${esc(c.code)}</span></li>`).join("")}</ul>
@@ -262,6 +268,11 @@ app.addEventListener("click", ev => {
   else if (act === "retry") loadStatus();
   else if (act === "addPerson") { document.getElementById("people").insertAdjacentHTML("beforeend", personRow({})); document.querySelector("#people [data-row]:last-child .nm").focus(); }
   else if (act === "rm") el.closest("[data-row]").remove();
+  else if (act === "saveDetails") {
+    const g = id => document.getElementById(id).value.trim();
+    adminCall(el, "admin.details", { eventName: g("dName"), budget: g("dBudget"), when: g("dWhen") }, "Saving…", "Sparar…",
+      () => ({ kind: "ok", en: "Details saved. The draw is unchanged.", sv: "Detaljerna är sparade. Dragningen är oförändrad.", where: "" }));
+  }
   else if (act === "saveSetup") adminCall(el, "admin.save", readSetup(), "Saving…", "Sparar…", () => ({ kind: "ok", en: "List saved.", sv: "Listan är sparad.", where: "" }));
   else if (act === "draw") {
     const notify = document.getElementById("notify").checked;
