@@ -50,9 +50,11 @@ function route(req) {
     case 'reveal':      return reveal(req.code);
     case 'admin.get':   adminCheck(req.password); return adminView();
     case 'admin.save':  adminCheck(req.password); return adminSave(req);
+    case 'admin.details': adminCheck(req.password); return adminDetails(req);
     case 'admin.draw':  adminCheck(req.password); return adminDraw(req);
     case 'admin.emailAll': adminCheck(req.password); return adminEmailAll(req);
     case 'admin.reset': adminCheck(req.password); return adminReset();
+    case 'admin.codes': adminCheck(req.password); return adminCodes();
     default: throw fail('bad_request');
   }
 }
@@ -115,6 +117,15 @@ function adminView(extra) {
   return Object.assign(v, extra || {});
 }
 
+/** Event name, budget and date only. Allowed after the draw: it never touches people, codes or pairs. */
+function adminDetails(req) {
+  const s = load();
+  applySettings(s, { eventName: req.eventName, budget: req.budget, when: req.when });
+  if (!s.eventName) s.eventName = 'Secret Santa';
+  save(s);
+  return adminView();
+}
+
 function adminSave(req) {
   const s = load();
   if (s.status === 'drawn') throw fail('already_drawn');
@@ -155,6 +166,13 @@ function adminEmailAll() {
   const s = load();
   if (s.status !== 'drawn') throw fail('not_drawn');
   return adminView({ sent: emailAll(s) });
+}
+
+/** Names and codes only, for re-sending a code by hand. Never includes who has whom. */
+function adminCodes() {
+  const s = load();
+  if (s.status !== 'drawn') throw fail('not_drawn');
+  return { ok: true, codes: s.people.map(p => ({ name: p.name, code: p.code })) };
 }
 
 function adminReset() {
@@ -239,7 +257,7 @@ function load() {
   const s = raw ? JSON.parse(raw) : {};
   s.status = s.status || 'setup';
   s.people = s.people || [];
-  s.eventName = s.eventName || 'Family Secret Santa ' + new Date().getFullYear();
+  s.eventName = s.eventName || 'Nordlander Family Secret Santa ' + new Date().getFullYear();
   s.budget = s.budget || '';
   s.when = s.when || '';
   s.appUrl = s.appUrl || '';

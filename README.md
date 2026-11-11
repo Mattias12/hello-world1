@@ -1,4 +1,4 @@
-# 🎁 Family Secret Santa
+# 🎁 Nordlander Family Secret Santa 2026
 
 A small, free Secret Santa app. Everyone enters their email address, gets an
 email with a personal code and a link, then opens the page and sees who
