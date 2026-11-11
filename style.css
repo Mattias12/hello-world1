@@ -177,3 +177,4 @@ button,.btn{min-height:44px}
 #musicBtn[aria-pressed="true"] svg{animation:bob 1.1s ease-in-out infinite}
 @keyframes bob{50%{transform:translateY(-2px) rotate(-6deg)}}
 @media (prefers-reduced-motion:reduce){#musicBtn svg{animation:none!important}}
+.sentrow .arrow-to{color:var(--gold-soft);font-weight:500;white-space:nowrap}
