@@ -16,6 +16,8 @@ let flash = null;           // {kind,en,sv,where}
 let resetArmed = false;
 let revealed = false;
 let codes = null;           // organiser's "Show codes" list (names + codes only)
+let matches = null;         // {name: match}, filled only after "Show who has whom" is confirmed
+let matchArmed = false;
 
 /* ---------- helpers ---------- */
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -172,9 +174,11 @@ function adminDrawnHTML() {
     <label for="dWhen">${bil("Gift exchange", "Julklappsutdelning")}<input id="dWhen" value="${esc(admin.when || "")}"></label></div>
     <div class="actions"><button class="ghost small" data-act="saveDetails" id="saveDetailsBtn">${bil("Save details", "Spara detaljer")}</button></div></section>
   <section class="panel"><h2>${bi("Everyone's codes", "Allas koder")}</h2>
-    <p class="muted">${bi("Only names and codes, never who has whom. Careful: entering someone else's code on the page shows their match.", "Bara namn och koder, aldrig vem som har vem. Obs: skriver man in någon annans kod på sidan visas vem de har.")}</p>
-    ${codes ? `<ul class="sentlist">${codes.map(c => `<li class="sentrow"><span class="name">${esc(c.name)}</span><span class="codebadge">${esc(c.code)}</span></li>`).join("")}</ul>
-    <div class="actions"><button class="ghost small" data-act="hideCodes">${bil("Hide codes", "Dölj koderna")}</button></div>`
+    <p class="muted">${bi("Names and codes. Who has whom stays hidden unless you ask for it. Careful: entering someone else's code on the page also shows their match.", "Namn och koder. Vem som har vem visas bara om du ber om det. Obs: skriver man in någon annans kod på sidan visas också vem de har.")}</p>
+    ${codes ? `<ul class="sentlist">${codes.map(c => `<li class="sentrow"><span class="name">${esc(c.name)}${matches ? ` <span class="arrow-to">→ ${esc(matches[c.name] || "?")}</span>` : ""}</span><span class="codebadge">${esc(c.code)}</span></li>`).join("")}</ul>
+    <div class="actions"><button class="ghost small" data-act="hideCodes">${bil("Hide codes", "Dölj koderna")}</button>
+    ${matches ? `<button class="ghost small" data-act="hideMatches">${bil("Hide who has whom", "Dölj vem som har vem")}</button>`
+      : `<button class="${matchArmed ? "danger" : "ghost"} small" data-act="showMatches" id="showMatchesBtn">${matchArmed ? bil("Tap again: this spoils your own match", "Tryck igen: du ser vem du själv har") : bil("Show who has whom", "Visa vem som har vem")}</button>${matchArmed ? `<button class="link" data-act="cancelMatches">${bil("Cancel", "Avbryt")}</button>` : ""}`}</div>`
     : `<div class="actions"><button class="ghost small" data-act="showCodes" id="showCodesBtn">${bil("Show codes", "Visa koderna")}</button></div>`}</section>
   <section class="panel"><h2>${bi("Start over", "Börja om")}</h2>
     <p class="muted">${bi("Clears this draw for everyone. Codes already sent stop working. The list of people is kept.", "Rensar dragningen för alla. Skickade koder slutar fungera. Listan med personer sparas.")}</p>
@@ -264,7 +268,7 @@ app.addEventListener("click", ev => {
   const el = ev.target.closest("[data-act]"); if (!el) return;
   const act = el.dataset.act; ev.preventDefault();
   if (act === "organiser") { view = "organiser"; flash = null; render(); }
-  else if (act === "back" || act === "lock") { view = "main"; admin = null; adminPw = ""; codes = null; flash = null; resetArmed = false; loadStatus(); }
+  else if (act === "back" || act === "lock") { view = "main"; admin = null; adminPw = ""; codes = null; matches = null; matchArmed = false; flash = null; resetArmed = false; loadStatus(); }
   else if (act === "retry") loadStatus();
   else if (act === "addPerson") { document.getElementById("people").insertAdjacentHTML("beforeend", personRow({})); document.querySelector("#people [data-row]:last-child .nm").focus(); }
   else if (act === "rm") el.closest("[data-row]").remove();
@@ -281,7 +285,7 @@ app.addEventListener("click", ev => {
                   : { kind: "ok", en: "Names drawn! Share the link so everyone can get their code.", sv: "Namnen är dragna! Dela länken så att alla kan hämta sin kod.", where: "" });
   }
   else if (act === "emailAll") adminCall(el, "admin.emailAll", null, "Sending…", "Skickar…", a => ({ kind: "ok", en: `${a.sent} emails sent.`, sv: `${a.sent} mejl skickade.`, where: "" }));
-  else if (act === "reset") { if (!resetArmed) { resetArmed = true; render(); return; } codes = null; adminCall(el, "admin.reset", null, "Clearing…", "Rensar…", () => ({ kind: "ok", en: "Draw cleared.", sv: "Dragningen är rensad.", where: "" })); }
+  else if (act === "reset") { if (!resetArmed) { resetArmed = true; render(); return; } codes = null; matches = null; matchArmed = false; adminCall(el, "admin.reset", null, "Clearing…", "Rensar…", () => ({ kind: "ok", en: "Draw cleared.", sv: "Dragningen är rensad.", where: "" })); }
   else if (act === "cancelReset") { resetArmed = false; render(); }
   else if (act === "showCodes") {
     const done = busy(el, "Loading…", "Laddar…");
@@ -290,7 +294,18 @@ app.addEventListener("click", ev => {
       .catch(e => setFlash("err", e.message, e.sv || ""))
       .then(() => { done(); render(); });
   }
-  else if (act === "hideCodes") { codes = null; render(); }
+  else if (act === "hideCodes") { codes = null; matches = null; matchArmed = false; render(); }
+  else if (act === "cancelMatches") { matchArmed = false; render(); }
+  else if (act === "hideMatches") { matches = null; matchArmed = false; render(); }
+  else if (act === "showMatches") {
+    if (!matchArmed) { matchArmed = true; render(); return; }
+    // Look each code up exactly as the reveal page does; the backend needs no change.
+    const done = busy(el, "Loading…", "Laddar…");
+    Promise.all(codes.map(c => api("reveal", { code: c.code }).then(r => [c.name, r.to])))
+      .then(list => { matches = Object.fromEntries(list); flash = null; })
+      .catch(e => setFlash("err", e.message, e.sv || ""))
+      .then(() => { done(); matchArmed = false; render(); });
+  }
 });
 app.addEventListener("submit", ev => {
   ev.preventDefault();
