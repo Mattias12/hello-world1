@@ -15,6 +15,7 @@ let adminPw = "";
 let flash = null;           // {kind,en,sv,where}
 let resetArmed = false;
 let revealed = false;
+let codes = null;           // organiser's "Show codes" list (names + codes only)
 
 /* ---------- helpers ---------- */
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -164,6 +165,11 @@ function adminDrawnHTML() {
     <ul class="sentlist">${rows}</ul>
     <p class="muted" style="font-size:14px">${bi(`Gmail can still send ${admin.quota} emails today.`, `Gmail kan skicka ${admin.quota} mejl till i dag.`)}</p>
     <div class="actions"><button class="ghost small" data-act="emailAll" id="emailAllBtn">${bil("Email everyone their code", "Mejla allas koder")}</button></div></section>
+  <section class="panel"><h2>${bi("Everyone's codes", "Allas koder")}</h2>
+    <p class="muted">${bi("Only names and codes, never who has whom. Careful: entering someone else's code on the page shows their match.", "Bara namn och koder, aldrig vem som har vem. Obs: skriver man in någon annans kod på sidan visas vem de har.")}</p>
+    ${codes ? `<ul class="sentlist">${codes.map(c => `<li class="sentrow"><span class="name">${esc(c.name)}</span><span class="codebadge">${esc(c.code)}</span></li>`).join("")}</ul>
+    <div class="actions"><button class="ghost small" data-act="hideCodes">${bil("Hide codes", "Dölj koderna")}</button></div>`
+    : `<div class="actions"><button class="ghost small" data-act="showCodes" id="showCodesBtn">${bil("Show codes", "Visa koderna")}</button></div>`}</section>
   <section class="panel"><h2>${bi("Start over", "Börja om")}</h2>
     <p class="muted">${bi("Clears this draw for everyone. Codes already sent stop working. The list of people is kept.", "Rensar dragningen för alla. Skickade koder slutar fungera. Listan med personer sparas.")}</p>
     <div class="actions"><button class="danger small" data-act="reset" id="resetBtn">${resetArmed ? bil("Tap again to clear", "Tryck igen för att rensa") : bil("Clear the draw", "Rensa dragningen")}</button>${resetArmed ? `<button class="link" data-act="cancelReset">${bil("Cancel", "Avbryt")}</button>` : ""}</div></section>
@@ -252,7 +258,7 @@ app.addEventListener("click", ev => {
   const el = ev.target.closest("[data-act]"); if (!el) return;
   const act = el.dataset.act; ev.preventDefault();
   if (act === "organiser") { view = "organiser"; flash = null; render(); }
-  else if (act === "back" || act === "lock") { view = "main"; admin = null; adminPw = ""; flash = null; resetArmed = false; loadStatus(); }
+  else if (act === "back" || act === "lock") { view = "main"; admin = null; adminPw = ""; codes = null; flash = null; resetArmed = false; loadStatus(); }
   else if (act === "retry") loadStatus();
   else if (act === "addPerson") { document.getElementById("people").insertAdjacentHTML("beforeend", personRow({})); document.querySelector("#people [data-row]:last-child .nm").focus(); }
   else if (act === "rm") el.closest("[data-row]").remove();
@@ -264,8 +270,16 @@ app.addEventListener("click", ev => {
                   : { kind: "ok", en: "Names drawn! Share the link so everyone can get their code.", sv: "Namnen är dragna! Dela länken så att alla kan hämta sin kod.", where: "" });
   }
   else if (act === "emailAll") adminCall(el, "admin.emailAll", null, "Sending…", "Skickar…", a => ({ kind: "ok", en: `${a.sent} emails sent.`, sv: `${a.sent} mejl skickade.`, where: "" }));
-  else if (act === "reset") { if (!resetArmed) { resetArmed = true; render(); return; } adminCall(el, "admin.reset", null, "Clearing…", "Rensar…", () => ({ kind: "ok", en: "Draw cleared.", sv: "Dragningen är rensad.", where: "" })); }
+  else if (act === "reset") { if (!resetArmed) { resetArmed = true; render(); return; } codes = null; adminCall(el, "admin.reset", null, "Clearing…", "Rensar…", () => ({ kind: "ok", en: "Draw cleared.", sv: "Dragningen är rensad.", where: "" })); }
   else if (act === "cancelReset") { resetArmed = false; render(); }
+  else if (act === "showCodes") {
+    const done = busy(el, "Loading…", "Laddar…");
+    api("admin.codes", { password: adminPw })
+      .then(r => { codes = r.codes; flash = null; })
+      .catch(e => setFlash("err", e.message, e.sv || ""))
+      .then(() => { done(); render(); });
+  }
+  else if (act === "hideCodes") { codes = null; render(); }
 });
 app.addEventListener("submit", ev => {
   ev.preventDefault();

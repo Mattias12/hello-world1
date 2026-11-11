@@ -53,6 +53,7 @@ function route(req) {
     case 'admin.draw':  adminCheck(req.password); return adminDraw(req);
     case 'admin.emailAll': adminCheck(req.password); return adminEmailAll(req);
     case 'admin.reset': adminCheck(req.password); return adminReset();
+    case 'admin.codes': adminCheck(req.password); return adminCodes();
     default: throw fail('bad_request');
   }
 }
@@ -155,6 +156,13 @@ function adminEmailAll() {
   const s = load();
   if (s.status !== 'drawn') throw fail('not_drawn');
   return adminView({ sent: emailAll(s) });
+}
+
+/** Names and codes only, for re-sending a code by hand. Never includes who has whom. */
+function adminCodes() {
+  const s = load();
+  if (s.status !== 'drawn') throw fail('not_drawn');
+  return { ok: true, codes: s.people.map(p => ({ name: p.name, code: p.code })) };
 }
 
 function adminReset() {
