@@ -2,14 +2,16 @@
 (function () {
 "use strict";
 
-const API = String(window.SECRET_SANTA_API || "").trim();
+// BACKUP is set when Apps Script serves this page itself (doGet in Code.gs); calls then go through google.script.run.
+const BACKUP = window.SS_BACKUP || null;
+const API = BACKUP ? "apps-script" : String(window.SECRET_SANTA_API || "").trim();
 const app = document.getElementById("app");
 const params = new URLSearchParams(location.search);
-const urlCode = params.get("code") || "";
-const PAGE_URL = location.origin + location.pathname;
+const urlCode = params.get("code") || (BACKUP && BACKUP.code) || "";
+const PAGE_URL = BACKUP && BACKUP.url ? BACKUP.url : location.origin + location.pathname;
 
 let STATUS = null;          // public status from the server
-let view = params.has("organiser") ? "organiser" : "main";
+let view = params.has("organiser") || (BACKUP && BACKUP.organiser) ? "organiser" : "main";
 let admin = null;           // organiser view data
 let adminPw = "";
 let flash = null;           // {kind,en,sv,where}
@@ -58,6 +60,16 @@ function errFor(j) {
 async function api(action, data) {
   if (!API) throw new BiError("This page isn't connected to its backend yet (config.js).", "Sidan är inte kopplad till sin backend än (config.js).");
   let res, j;
+  if (BACKUP) {
+    try {
+      j = await new Promise((resolve, reject) => google.script.run
+        .withSuccessHandler(txt => { try { resolve(JSON.parse(txt)); } catch (e) { reject(e); } })
+        .withFailureHandler(reject)
+        .apiCall(JSON.stringify(Object.assign({ action }, data || {}))));
+    } catch (e) { throw new BiError("Couldn't reach the server. Check your connection and try again.", "Kunde inte nå servern. Kontrollera anslutningen och försök igen."); }
+    if (!j.ok) throw errFor(j);
+    return j;
+  }
   try {
     // text/plain keeps this a "simple" request, so Apps Script needs no CORS preflight.
     res = await fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(Object.assign({ action }, data || {})) });

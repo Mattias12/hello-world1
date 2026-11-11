@@ -90,3 +90,18 @@ need to change.
   the visitor's first tap. The round 🎵 button in the corner turns it on or off, and the
   page remembers that choice.
 - The page is built for phones first. Every screen was checked at 320px and 375px widths.
+
+## Backup page (if GitHub Pages is down)
+
+Your Apps Script Web app URL (the one in `config.js`) also serves a full copy of the page when opened in a browser:
+
+- `…/exec` is the main page (get a code, open your present)
+- `…/exec?code=XXXX-XXXX` opens with the code filled in
+- `…/exec?organiser` opens the organiser page
+
+Google shows a small "created by a Google Apps Script user" banner above it. Code emails still link to the
+GitHub Pages address saved as **Link to this page**.
+
+Every function in `apps-script/Code.gs` except `doGet`, `doPost`, `apiCall` and `testSetup` ends in `_`.
+That keeps them private: the page can't call them directly, only through the password checks in `route_`.
+After changing any front-end file, run `node tools/build-backup.js` to rebuild the copy inside `Code.gs`.

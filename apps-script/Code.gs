@@ -18,20 +18,41 @@ const STATE_KEY = 'state';
 
 /* ---------------- entry points ---------------- */
 
-function doGet() {
-  return out({ ok: true, service: 'secret-santa' });
+/**
+ * Opening the Web app URL in a browser shows a backup copy of the Secret Santa page
+ * (for when GitHub Pages is down). Add ?code=XXXX-XXXX or ?organiser like on the main site.
+ * Every other function in this file ends in "_" so the page can't call it directly.
+ */
+function doGet(e) {
+  const p = (e && e.parameter) || {};
+  if (p.api !== undefined) return out_({ ok: true, service: 'secret-santa' });
+  const boot = { code: String(p.code || '').slice(0, 20), organiser: p.organiser !== undefined, url: ScriptApp.getService().getUrl() };
+  const html = BACKUP_PAGE_HTML.replace('<!--BOOT-->',
+    '<script>window.SS_BACKUP=' + JSON.stringify(boot).replace(/</g, '\\u003c') + ';</script>');
+  return HtmlService.createHtmlOutput(html)
+    .setTitle('Nordlander Family Secret Santa 2026')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover');
 }
 
 function doPost(e) {
+  return out_(handle_((e && e.postData && e.postData.contents) || '{}'));
+}
+
+/** Called by the backup page (served by doGet) through google.script.run. Same rules as doPost. */
+function apiCall(json) {
+  return JSON.stringify(handle_(String(json || '{}')));
+}
+
+function handle_(body) {
   let req;
-  try { req = JSON.parse((e && e.postData && e.postData.contents) || '{}'); }
-  catch (err) { return out({ ok: false, error: 'bad_request' }); }
+  try { req = JSON.parse(body); }
+  catch (err) { return { ok: false, error: 'bad_request' }; }
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(20000);
-    return out(route(req));
+    return route_(req);
   } catch (err) {
-    return out({ ok: false, error: err.code || 'server_error', message: String(err.message || err) });
+    return { ok: false, error: err.code || 'server_error', message: String(err.message || err) };
   } finally {
     try { lock.releaseLock(); } catch (e2) {}
   }
@@ -43,71 +64,71 @@ function testSetup() {
   Logger.log('OK. Emails you can still send today: ' + MailApp.getRemainingDailyQuota());
 }
 
-function route(req) {
+function route_(req) {
   switch (req.action) {
-    case 'status':      return publicStatus();
-    case 'requestCode': return requestCode(req.email);
-    case 'reveal':      return reveal(req.code);
-    case 'admin.get':   adminCheck(req.password); return adminView();
-    case 'admin.save':  adminCheck(req.password); return adminSave(req);
-    case 'admin.details': adminCheck(req.password); return adminDetails(req);
-    case 'admin.draw':  adminCheck(req.password); return adminDraw(req);
-    case 'admin.emailAll': adminCheck(req.password); return adminEmailAll(req);
-    case 'admin.reset': adminCheck(req.password); return adminReset();
-    case 'admin.codes': adminCheck(req.password); return adminCodes();
-    default: throw fail('bad_request');
+    case 'status':      return publicStatus_();
+    case 'requestCode': return requestCode_(req.email);
+    case 'reveal':      return reveal_(req.code);
+    case 'admin.get':   adminCheck_(req.password); return adminView_();
+    case 'admin.save':  adminCheck_(req.password); return adminSave_(req);
+    case 'admin.details': adminCheck_(req.password); return adminDetails_(req);
+    case 'admin.draw':  adminCheck_(req.password); return adminDraw_(req);
+    case 'admin.emailAll': adminCheck_(req.password); return adminEmailAll_(req);
+    case 'admin.reset': adminCheck_(req.password); return adminReset_();
+    case 'admin.codes': adminCheck_(req.password); return adminCodes_();
+    default: throw fail_('bad_request');
   }
 }
 
 /* ---------------- public actions ---------------- */
 
-function publicStatus() {
-  const s = load();
+function publicStatus_() {
+  const s = load_();
   return { ok: true, status: s.status, eventName: s.eventName, budget: s.budget, when: s.when, count: s.people.length };
 }
 
-function requestCode(email) {
-  const s = load();
-  if (s.status !== 'drawn') throw fail('not_drawn');
-  const em = normEmail(email);
-  if (!em) throw fail('bad_email');
-  const p = s.people.find(x => normEmail(x.email) === em);
-  if (!p) throw fail('not_found');
+function requestCode_(email) {
+  const s = load_();
+  if (s.status !== 'drawn') throw fail_('not_drawn');
+  const em = normEmail_(email);
+  if (!em) throw fail_('bad_email');
+  const p = s.people.find(x => normEmail_(x.email) === em);
+  if (!p) throw fail_('not_found');
   const cache = CacheService.getScriptCache(), key = 'sent:' + em;
   const n = Number(cache.get(key) || 0);
-  if (n >= MAX_SENDS_PER_EMAIL) throw fail('too_many');
-  sendCodeEmail(s, p);
+  if (n >= MAX_SENDS_PER_EMAIL) throw fail_('too_many');
+  sendCodeEmail_(s, p);
   cache.put(key, String(n + 1), 6 * 3600);
   p.sentAt = new Date().toISOString();
-  save(s);
+  save_(s);
   return { ok: true };
 }
 
-function reveal(code) {
+function reveal_(code) {
   const cache = CacheService.getScriptCache();
   const fails = Number(cache.get('revealFails') || 0);
-  if (fails >= 60) throw fail('too_many');
-  const s = load();
-  if (s.status !== 'drawn') throw fail('not_drawn');
-  const c = normCode(code);
-  const p = c && s.people.find(x => normCode(x.code) === c);
-  if (!p) { cache.put('revealFails', String(fails + 1), 600); throw fail('bad_code'); }
+  if (fails >= 60) throw fail_('too_many');
+  const s = load_();
+  if (s.status !== 'drawn') throw fail_('not_drawn');
+  const c = normCode_(code);
+  const p = c && s.people.find(x => normCode_(x.code) === c);
+  if (!p) { cache.put('revealFails', String(fails + 1), 600); throw fail_('bad_code'); }
   const to = s.people.find(x => x.id === s.pairs[p.id]);
   return { ok: true, giver: p.name, to: to.name, budget: s.budget, when: s.when };
 }
 
 /* ---------------- organiser actions ---------------- */
 
-function adminCheck(pw) {
-  if (ADMIN_PASSWORD === 'change-me-please') throw fail('set_password');
+function adminCheck_(pw) {
+  if (ADMIN_PASSWORD === 'change-me-please') throw fail_('set_password');
   const cache = CacheService.getScriptCache();
   const fails = Number(cache.get('adminFails') || 0);
-  if (fails >= 10) throw fail('too_many');
-  if (String(pw || '') !== ADMIN_PASSWORD) { cache.put('adminFails', String(fails + 1), 900); throw fail('bad_password'); }
+  if (fails >= 10) throw fail_('too_many');
+  if (String(pw || '') !== ADMIN_PASSWORD) { cache.put('adminFails', String(fails + 1), 900); throw fail_('bad_password'); }
 }
 
-function adminView(extra) {
-  const s = load();
+function adminView_(extra) {
+  const s = load_();
   const v = {
     ok: true, status: s.status, eventName: s.eventName, budget: s.budget, when: s.when, appUrl: s.appUrl,
     drawnAt: s.drawnAt || null, checks: s.checks || null, quota: MailApp.getRemainingDailyQuota(),
@@ -118,82 +139,82 @@ function adminView(extra) {
 }
 
 /** Event name, budget and date only. Allowed after the draw: it never touches people, codes or pairs. */
-function adminDetails(req) {
-  const s = load();
-  applySettings(s, { eventName: req.eventName, budget: req.budget, when: req.when });
+function adminDetails_(req) {
+  const s = load_();
+  applySettings_(s, { eventName: req.eventName, budget: req.budget, when: req.when });
   if (!s.eventName) s.eventName = 'Secret Santa';
-  save(s);
-  return adminView();
+  save_(s);
+  return adminView_();
 }
 
-function adminSave(req) {
-  const s = load();
-  if (s.status === 'drawn') throw fail('already_drawn');
-  applySettings(s, req);
-  const people = cleanPeople(req.people || []);
-  s.people = people.map(p => ({ id: uid(), name: p.name, email: p.email }));
-  save(s);
-  return adminView();
+function adminSave_(req) {
+  const s = load_();
+  if (s.status === 'drawn') throw fail_('already_drawn');
+  applySettings_(s, req);
+  const people = cleanPeople_(req.people || []);
+  s.people = people.map(p => ({ id: uid_(), name: p.name, email: p.email }));
+  save_(s);
+  return adminView_();
 }
 
-function adminDraw(req) {
-  const s = load();
-  if (s.status === 'drawn') throw fail('already_drawn');
-  applySettings(s, req);
-  if (req.people) s.people = cleanPeople(req.people).map(p => ({ id: uid(), name: p.name, email: p.email }));
-  cleanPeople(s.people); // validates
-  if (!s.appUrl) throw fail('no_app_url');
+function adminDraw_(req) {
+  const s = load_();
+  if (s.status === 'drawn') throw fail_('already_drawn');
+  applySettings_(s, req);
+  if (req.people) s.people = cleanPeople_(req.people).map(p => ({ id: uid_(), name: p.name, email: p.email }));
+  cleanPeople_(s.people); // validates
+  if (!s.appUrl) throw fail_('no_app_url');
 
   const ids = s.people.map(p => p.id);
   let pairs, v, tries = 0;
-  do { pairs = drawLoop(ids); v = verify(ids, pairs); } while (!v.ok && ++tries < 20);
-  if (!v.ok) throw fail('draw_failed');
+  do { pairs = drawLoop_(ids); v = verify_(ids, pairs); } while (!v.ok && ++tries < 20);
+  if (!v.ok) throw fail_('draw_failed');
 
   const used = {};
-  s.people.forEach(p => { let c; do { c = makeCode(); } while (used[c]); used[c] = 1; p.code = c; delete p.sentAt; });
+  s.people.forEach(p => { let c; do { c = makeCode_(); } while (used[c]); used[c] = 1; p.code = c; delete p.sentAt; });
   s.pairs = pairs;
   s.checks = v.checks;
   s.status = 'drawn';
   s.drawnAt = new Date().toISOString();
-  save(s);
+  save_(s);
 
   let sent = 0;
-  if (req.notify) sent = emailAll(s);
-  return adminView({ sent: sent });
+  if (req.notify) sent = emailAll_(s);
+  return adminView_({ sent: sent });
 }
 
-function adminEmailAll() {
-  const s = load();
-  if (s.status !== 'drawn') throw fail('not_drawn');
-  return adminView({ sent: emailAll(s) });
+function adminEmailAll_() {
+  const s = load_();
+  if (s.status !== 'drawn') throw fail_('not_drawn');
+  return adminView_({ sent: emailAll_(s) });
 }
 
 /** Names and codes only, for re-sending a code by hand. Never includes who has whom. */
-function adminCodes() {
-  const s = load();
-  if (s.status !== 'drawn') throw fail('not_drawn');
+function adminCodes_() {
+  const s = load_();
+  if (s.status !== 'drawn') throw fail_('not_drawn');
   return { ok: true, codes: s.people.map(p => ({ name: p.name, code: p.code })) };
 }
 
-function adminReset() {
-  const s = load();
+function adminReset_() {
+  const s = load_();
   s.status = 'setup';
   s.people = s.people.map(p => ({ id: p.id, name: p.name, email: p.email }));
   delete s.pairs; delete s.checks; delete s.drawnAt;
-  save(s);
-  return adminView();
+  save_(s);
+  return adminView_();
 }
 
 /* ---------------- email ---------------- */
 
-function emailAll(s) {
-  if (MailApp.getRemainingDailyQuota() < s.people.length) throw fail('quota');
-  s.people.forEach(p => { sendCodeEmail(s, p); p.sentAt = new Date().toISOString(); });
-  save(s);
+function emailAll_(s) {
+  if (MailApp.getRemainingDailyQuota() < s.people.length) throw fail_('quota');
+  s.people.forEach(p => { sendCodeEmail_(s, p); p.sentAt = new Date().toISOString(); });
+  save_(s);
   return s.people.length;
 }
 
-function sendCodeEmail(s, p) {
+function sendCodeEmail_(s, p) {
   const ev = s.eventName || 'Secret Santa';
   const link = s.appUrl + (s.appUrl.indexOf('?') >= 0 ? '&' : '?') + 'code=' + encodeURIComponent(p.code);
   const extra = [];
@@ -227,13 +248,13 @@ function sendCodeEmail(s, p) {
 
 /* ---------------- the draw: one shuffled loop ---------------- */
 
-function drawLoop(ids) {
-  const order = shuffle(ids), pairs = {};
+function drawLoop_(ids) {
+  const order = shuffle_(ids), pairs = {};
   for (let i = 0; i < order.length; i++) pairs[order[i]] = order[(i + 1) % order.length];
   return pairs;
 }
 
-function verify(ids, pairs) {
+function verify_(ids, pairs) {
   const n = ids.length, givers = Object.keys(pairs), recv = givers.map(g => pairs[g]), set = {};
   ids.forEach(i => set[i] = 1);
   const checks = [];
@@ -252,7 +273,7 @@ function verify(ids, pairs) {
 
 /* ---------------- helpers ---------------- */
 
-function load() {
+function load_() {
   const raw = PropertiesService.getScriptProperties().getProperty(STATE_KEY);
   const s = raw ? JSON.parse(raw) : {};
   s.status = s.status || 'setup';
@@ -264,35 +285,35 @@ function load() {
   return s;
 }
 
-function save(s) {
+function save_(s) {
   PropertiesService.getScriptProperties().setProperty(STATE_KEY, JSON.stringify(s));
 }
 
-function applySettings(s, req) {
+function applySettings_(s, req) {
   ['eventName', 'budget', 'when', 'appUrl'].forEach(k => {
     if (typeof req[k] === 'string') s[k] = req[k].trim().slice(0, 300);
   });
-  if (s.appUrl && !/^https?:\/\//i.test(s.appUrl)) throw fail('no_app_url');
+  if (s.appUrl && !/^https?:\/\//i.test(s.appUrl)) throw fail_('no_app_url');
 }
 
-function cleanPeople(list) {
+function cleanPeople_(list) {
   const people = list.map(p => ({ name: String(p.name || '').trim().slice(0, 80), email: String(p.email || '').trim().slice(0, 200) }))
     .filter(p => p.name || p.email);
-  if (people.length < 3) throw fail('too_few');
-  if (people.length > 60) throw fail('too_many_people');
+  if (people.length < 3) throw fail_('too_few');
+  if (people.length > 60) throw fail_('too_many_people');
   const names = {}, emails = {};
   people.forEach(p => {
-    if (!p.name) throw fail('need_name');
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.email)) throw fail('bad_email', p.name);
-    const n = p.name.toLowerCase(), e = normEmail(p.email);
-    if (names[n]) throw fail('dup_name', p.name);
-    if (emails[e]) throw fail('dup_email', p.email);
+    if (!p.name) throw fail_('need_name');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.email)) throw fail_('bad_email', p.name);
+    const n = p.name.toLowerCase(), e = normEmail_(p.email);
+    if (names[n]) throw fail_('dup_name', p.name);
+    if (emails[e]) throw fail_('dup_email', p.email);
     names[n] = emails[e] = 1;
   });
   return people;
 }
 
-function randBytes(n) {
+function randBytes_(n) {
   let hex = '';
   while (hex.length < n * 2) {
     // A v4 UUID is random except the version (index 12) and variant (index 16) digits; skip those.
@@ -303,22 +324,26 @@ function randBytes(n) {
   for (let i = 0; i < n; i++) out.push(parseInt(hex.substr(i * 2, 2), 16));
   return out;
 }
-function randInt(n) {
+function randInt_(n) {
   const lim = Math.floor(65536 / n) * n;
-  for (;;) { const b = randBytes(2), v = b[0] * 256 + b[1]; if (v < lim) return v % n; }
+  for (;;) { const b = randBytes_(2), v = b[0] * 256 + b[1]; if (v < lim) return v % n; }
 }
-function shuffle(a) {
+function shuffle_(a) {
   a = a.slice();
-  for (let i = a.length - 1; i > 0; i--) { const j = randInt(i + 1); const t = a[i]; a[i] = a[j]; a[j] = t; }
+  for (let i = a.length - 1; i > 0; i--) { const j = randInt_(i + 1); const t = a[i]; a[i] = a[j]; a[j] = t; }
   return a;
 }
-function makeCode() {
+function makeCode_() {
   let s = '';
-  for (let i = 0; i < 8; i++) s += ALPHA[randInt(ALPHA.length)];
+  for (let i = 0; i < 8; i++) s += ALPHA[randInt_(ALPHA.length)];
   return s.slice(0, 4) + '-' + s.slice(4);
 }
-function uid() { return Utilities.getUuid().replace(/-/g, '').slice(0, 12); }
-function normCode(s) { return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
-function normEmail(s) { return String(s || '').trim().toLowerCase(); }
-function fail(code, detail) { const e = new Error(code); e.code = code; if (detail) e.message = detail; return e; }
-function out(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
+function uid_() { return Utilities.getUuid().replace(/-/g, '').slice(0, 12); }
+function normCode_(s) { return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+function normEmail_(s) { return String(s || '').trim().toLowerCase(); }
+function fail_(code, detail) { const e = new Error(code); e.code = code; if (detail) e.message = detail; return e; }
+function out_(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
+
+/* ==== BACKUP PAGE: generated by tools/build-backup.js from index.html, style.css and the .js files. Do not edit by hand. ==== */
+const BACKUP_PAGE_HTML = "<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap\">\n<style>/* Layout: a Christmas-night card — snowy scene up top, one column of frosted panels, a gift that bursts open on reveal.\n   Deliberately one look (a snowy night) in every theme. */\n:root{\n  --night:#0B1F1A; --night-2:#0F2C24; --surface:#133A2F; --surface-2:#184637; --line:#2E5E4D;\n  --snow:#FBF7EE; --muted:#BCD0C3; --red:#D7263D; --red-deep:#A51C30; --gold:#F2C14E; --gold-soft:#F7DA8E;\n  --green:#2F9A62; --green-deep:#1D6B43; --skin:#F6CBA9; --brown:#8C5A38; --brown-deep:#5E3B23;\n  --tag:#FFF6E2; --tag-ink:#3A2A12; --err:#FF8A96; --ok:#7EE0A6;\n  --display:\"Fredoka\",ui-rounded,\"Arial Rounded MT Bold\",system-ui,sans-serif;\n  --body:\"Figtree\",ui-sans-serif,system-ui,sans-serif;\n  --mono:\"JetBrains Mono\",ui-monospace,Menlo,monospace;\n  color-scheme:dark;\n}\nhtml{background:var(--night)}\nbody{background:radial-gradient(120% 70% at 50% -10%,#1B4A3B 0%,var(--night-2) 45%,var(--night) 100%) fixed,var(--night);color:var(--snow);font-family:var(--body);font-size:16px;line-height:1.5;min-height:100vh;\n  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 56px}\n*{box-sizing:border-box}\n#snow{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:0}\n#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:50}\n.wrap{position:relative;z-index:1;max-width:580px;margin:0 auto;display:flex;flex-direction:column;gap:24px}\nheader{display:flex;flex-direction:column;gap:4px;text-align:center;align-items:center}\n.scene{width:100%;max-width:100%;height:auto;display:block;margin-bottom:-6px}\n.eyebrow{font-family:var(--display);font-size:14px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);font-weight:600}\nh1{font-family:var(--display);font-weight:700;font-size:clamp(34px,9vw,52px);line-height:1.02;margin:0;text-wrap:balance;color:var(--snow);text-shadow:0 3px 0 var(--red-deep)}\nh2{font-family:var(--display);font-weight:600;font-size:23px;margin:0;text-wrap:balance;color:var(--gold-soft)}\n.meta{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:8px}\n.chip{font-size:14px;border:1px solid var(--gold);border-radius:999px;padding:3px 12px;color:var(--gold-soft);background:rgba(0,0,0,.18)}\n.lights{width:100%;height:30px;display:block}\n.lights .bulb{animation:twinkle 1.6s ease-in-out infinite}\n.lights .bulb:nth-child(3n){animation-delay:.5s}.lights .bulb:nth-child(3n+1){animation-delay:1s}\n@keyframes twinkle{50%{opacity:.35}}\np{margin:0}\n.muted{color:var(--muted)}\n.panel{background:linear-gradient(180deg,var(--surface-2),var(--surface));border:1px solid var(--line);border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}\n.panel.festive{border:2px solid var(--gold);position:relative}\n.panel.festive::after{content:\"\";position:absolute;top:-12px;right:22px;width:26px;height:26px;background:var(--red);border-radius:50%;box-shadow:inset -4px -4px 0 var(--red-deep),0 0 0 3px var(--gold)}\nlabel{display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:600;min-width:0;color:var(--muted)}\ninput,select{font:inherit;font-size:16px;color:var(--snow);background:var(--night);border:1px solid var(--line);border-radius:12px;padding:11px 12px;width:100%;min-width:0}\ninput::placeholder{color:#7F988A}\ninput:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{outline:3px solid var(--gold);outline-offset:2px}\n.code-input{font-family:var(--mono);letter-spacing:.16em;text-transform:uppercase;font-size:20px;text-align:center}\n.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}\n@media (max-width:480px){.row2{grid-template-columns:1fr}}\nbutton,.btn{font:inherit;font-weight:600;font-size:16px;border-radius:12px;padding:12px 18px;cursor:pointer;border:1px solid transparent;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:8px}\n.primary{background:var(--red);color:var(--snow);box-shadow:0 4px 0 var(--red-deep);font-family:var(--display);font-size:18px;letter-spacing:.02em}\n.primary:hover{filter:brightness(1.07)}\n.primary:active{transform:translateY(2px);box-shadow:0 2px 0 var(--red-deep)}\n.primary:disabled{opacity:.6;cursor:progress}\n.big{width:100%;padding:15px 18px}\n.ghost{background:transparent;color:var(--snow);border-color:var(--line)}\n.small{font-size:14px;padding:7px 11px;border-radius:9px}\n.link{background:none;border:none;color:var(--muted);padding:0;font-weight:500;text-decoration:underline;text-underline-offset:3px}\n.danger{color:var(--err);border-color:var(--err);background:transparent}\n.msg{font-size:14px;padding:10px 12px;border-radius:10px;background:rgba(0,0,0,.2);border:1px solid var(--line)}\n.msg.err{color:var(--err);border-color:var(--err)}\n.msg.ok{color:var(--ok);border-color:var(--ok)}\n.people{display:flex;flex-direction:column;gap:10px}\n.person{display:grid;grid-template-columns:1fr 1.4fr auto;gap:8px;align-items:center}\n@media (max-width:480px){.person{grid-template-columns:1fr auto}.person .em{grid-column:1/2}}\n.x{background:none;border:1px solid var(--line);color:var(--muted);width:42px;height:46px;border-radius:12px;padding:0;font-size:18px}\n.actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}\n.foot{display:flex;justify-content:center}\n.waiting{display:flex;gap:16px;align-items:center}\n.waiting svg{flex:0 0 auto;width:86px;height:auto}\n@media (max-width:420px){.waiting{flex-direction:column;text-align:center}}\n/* reveal stage */\n.stage{display:flex;flex-direction:column;align-items:center;gap:10px;padding:8px 0 4px;min-height:240px;justify-content:center}\n.giftbox{width:150px;height:auto;overflow:visible}\n.giftbox.shake{animation:shake .9s ease-in-out}\n.giftbox .lid{transform-origin:75px 52px;transform-box:view-box}\n.giftbox.open .lid{animation:lidpop .7s cubic-bezier(.2,.8,.3,1) forwards}\n.giftbox.open{animation:boxfade .5s .45s ease forwards}\n@keyframes shake{0%,100%{transform:rotate(0)}15%{transform:rotate(-8deg)}30%{transform:rotate(7deg)}45%{transform:rotate(-6deg)}60%{transform:rotate(5deg)}75%{transform:rotate(-3deg)}}\n@keyframes lidpop{to{transform:translate(40px,-90px) rotate(35deg);opacity:0}}\n@keyframes boxfade{to{opacity:0;transform:scale(.85)}}\n.stage .hint{font-family:var(--display);color:var(--gold-soft);font-size:18px}\n.tagwrap{display:flex;justify-content:center;padding:10px 0 4px}\n.tag{position:relative;background:var(--tag);color:var(--tag-ink);width:min(330px,100%);padding:46px 24px 26px;\n  clip-path:polygon(18% 0,82% 0,100% 14%,100% 100%,0 100%,0 14%);transform:rotate(-2deg);\n  display:flex;flex-direction:column;gap:6px;text-align:center;animation:swing 1s cubic-bezier(.2,.9,.3,1.3) both;\n  background-image:repeating-linear-gradient(135deg,transparent 0 14px,rgba(215,38,61,.06) 14px 20px)}\n.tag::before{content:\"\";position:absolute;top:14px;left:50%;width:16px;height:16px;margin-left:-8px;border-radius:50%;background:var(--night);box-shadow:inset 0 0 0 3px var(--gold)}\n.tag .lbl{font-size:13px;letter-spacing:.16em;text-transform:uppercase;opacity:.7;font-weight:600}\n.tag .who{font-family:var(--display);font-weight:700;font-size:clamp(34px,10vw,46px);line-height:1.1;color:var(--red);overflow-wrap:anywhere}\n.tag .who span{display:inline-block;animation:pop .5s cubic-bezier(.2,.9,.3,1.6) both}\n.tag .from{font-size:14px;opacity:.75;margin-top:6px}\n.tag .holly{display:block;margin:2px auto 0}\n@keyframes swing{0%{transform:rotate(-14deg) translateY(-30px) scale(.6);opacity:0}60%{transform:rotate(3deg) scale(1.03);opacity:1}100%{transform:rotate(-2deg)}}\n@keyframes pop{0%{transform:translateY(14px) scale(.3);opacity:0}100%{transform:none;opacity:1}}\n.after{text-align:center;font-size:14px}\n.sendlist{display:flex;flex-direction:column;gap:12px}\n.send{border:1px solid var(--line);background:rgba(0,0,0,.15);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:8px;min-width:0}\n.send .top{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline}\n.send .name{font-weight:600}\n.send .email{color:var(--muted);font-size:14px;user-select:all;overflow-wrap:anywhere}\n.codebadge{font-family:var(--mono);font-size:15px;letter-spacing:.12em;user-select:all;color:var(--gold)}\n.mailtext{width:100%;font-size:13px;background:var(--night);border:1px dashed var(--line);border-radius:8px;padding:8px;white-space:pre-wrap;user-select:all;color:var(--muted)}\n.checks{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px;font-size:15px}\n.checks li::before{content:\"✓  \";color:var(--ok);font-weight:700}\n.checks li.bad::before{content:\"✕  \";color:var(--err)}\n.tablewrap{overflow-x:auto}\ntable{border-collapse:collapse;width:100%;font-size:15px}\ntd,th{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line)}\nth{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600}\n.arrow{color:var(--gold);width:28px;text-align:center}\n.chain{font-size:14px;color:var(--muted);overflow-wrap:anywhere}\n/* scene svg parts */\n.sky-star{fill:var(--gold-soft);animation:twinkle 2.4s ease-in-out infinite}\n.sky-star:nth-of-type(2n){animation-delay:1.2s}\n.moon{fill:#FFF3C9}\n.hill{fill:#E9F1EE}.hill2{fill:#D3E2DC}\n.tree{fill:var(--green)}.tree-d{fill:var(--green-deep)}.trunk{fill:var(--brown-deep)}\n.star{fill:var(--gold)}.bauble-r{fill:var(--red)}.bauble-g{fill:var(--gold)}\n.santa-red{fill:var(--red)}.santa-dark{fill:var(--red-deep)}.fur{fill:#FFFFFF}.skin{fill:var(--skin)}.ink{fill:#2A1B12}.cheek{fill:#F29A9A}.belt{fill:#22160F}.buckle{fill:var(--gold)}\n.deer{fill:var(--brown)}.deer-d{fill:var(--brown-deep)}.antler{stroke:#D9B48A;stroke-width:3;stroke-linecap:round;fill:none}.nose{fill:#FF3B4E}\n.sleigh-sil{fill:#0B1F1A;opacity:.85}\n.sleigh{animation:fly 16s linear infinite}\n@keyframes fly{0%{transform:translate(-200px,40px)}100%{transform:translate(720px,-20px)}}\n.wave{animation:wave 2.2s ease-in-out infinite;transform-origin:120px 140px;transform-box:view-box}\n@keyframes wave{0%,100%{transform:rotate(0)}50%{transform:rotate(-14deg)}}\n@media (prefers-reduced-motion:reduce){\n  .sleigh,.wave,.lights .bulb,.sky-star,.tag,.tag .who span,.giftbox.shake{animation:none}\n  .sleigh{transform:translate(330px,10px)}\n}\n.en{display:block}\n.sv{display:block;color:var(--muted);font-style:italic;margin-top:3px}\nh2 .sv{font-size:.68em;font-weight:500;font-style:normal;color:var(--muted);margin-top:2px}\n.msg .sv{color:inherit;opacity:.85}\n.sv-inline{font-weight:500;opacity:.78}\n.primary .sv-inline{opacity:.85}\n/* additions for the hosted version */\nbody{margin:0}\n.ok-t{color:var(--ok);font-size:14px}\ntd.email{color:var(--muted);font-size:14px;overflow-wrap:anywhere}\ninput[type=checkbox]{accent-color:var(--red);width:20px;height:20px}\n\n/* ---------- mobile polish ---------- */\n/* iOS ignores background-attachment:fixed, which left a seam; paint the night sky on a fixed layer instead */\nhtml{background:var(--night)}\nbody{background:transparent}\nbody::before{content:\"\";position:fixed;inset:0;z-index:-1;pointer-events:none;\n  background:radial-gradient(120% 70% at 50% -10%,#1B4A3B 0%,var(--night-2) 45%,var(--night) 100%)}\nbody{-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent;overflow-x:hidden;\n  padding-top:max(20px,env(safe-area-inset-top,0px));padding-bottom:max(96px,calc(env(safe-area-inset-bottom,0px) + 88px))}\nbutton,.btn,input,select,label{touch-action:manipulation}\nbutton,.btn{min-height:44px}\n.link{min-height:44px}\n/* bilingual labels on big buttons: English on top, Swedish underneath, never split mid-phrase */\n.primary .bil,.big .bil{display:flex;flex-direction:column;align-items:center;line-height:1.2;gap:2px}\n.primary .bil .dot,.big .bil .dot{display:none}\n.primary .sv-inline,.big .sv-inline{font-family:var(--body);font-size:.78em;font-weight:500}\n.bil{overflow-wrap:anywhere}\n/* checkbox row */\n.check{flex-direction:row;align-items:center;gap:12px;color:var(--snow);font-weight:500;cursor:pointer}\n.check input{width:22px;height:22px;flex:0 0 auto}\n/* who has been sent a code: a list that works at any width */\n.sentlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}\n.sentrow{display:grid;grid-template-columns:1fr auto;gap:2px 12px;padding:10px 0;border-bottom:1px solid var(--line);align-items:baseline}\n.sentrow .name{font-weight:600}\n.sentrow .email{grid-column:1/-1;color:var(--muted);font-size:14px;overflow-wrap:anywhere}\n.sentrow .ok-t,.sentrow .not-sent{font-size:13px;text-align:right}\n/* participants: each person is a small card on phones */\n@media (max-width:480px){\n  body{padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}\n  .wrap{gap:18px}\n  .panel{padding:18px 16px;border-radius:16px}\n  .person{grid-template-columns:1fr auto;grid-template-areas:\"nm x\" \"em em\";gap:8px;padding:10px;border:1px solid var(--line);border-radius:14px;background:rgba(0,0,0,.15)}\n  .person .nm{grid-area:nm}.person .em{grid-area:em}.person .x{grid-area:x;height:46px}\n  .tag{padding:42px 18px 22px}\n  .stage{min-height:200px}\n  h2{font-size:21px}\n}\n/* music toggle */\n#musicBtn{position:fixed;z-index:60;right:max(14px,env(safe-area-inset-right,0px));bottom:max(14px,calc(env(safe-area-inset-bottom,0px) + 10px));\n  width:52px;height:52px;border-radius:50%;padding:0;border:2px solid var(--gold);background:var(--red);color:var(--snow);\n  box-shadow:0 4px 0 var(--red-deep),0 8px 20px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;cursor:pointer}\n#musicBtn[aria-pressed=\"false\"]{background:var(--surface-2);color:var(--muted)}\n#musicBtn[aria-pressed=\"true\"] svg{animation:bob 1.1s ease-in-out infinite}\n@keyframes bob{50%{transform:translateY(-2px) rotate(-6deg)}}\n@media (prefers-reduced-motion:reduce){#musicBtn svg{animation:none!important}}\n.sentrow .arrow-to{color:var(--gold-soft);font-weight:500;white-space:nowrap}\n</style>\n<div class=\"wrap\"><div id=\"app\"></div></div>\n<!--BOOT-->\n<script>/* Festive art, snow and fireworks (carried over from the original artifact). */\n\"use strict\";\n/* ---------- festive art ---------- */\nconst REDUCED = (()=>{ try{ return matchMedia(\"(prefers-reduced-motion: reduce)\").matches; }catch(e){ return false; } })();\nfunction starPath(cx,cy,R,r){ let d=\"\"; for(let i=0;i<10;i++){ const a=-Math.PI/2+i*Math.PI/5, rad=i%2?r:R; d+=(i?\"L\":\"M\")+(cx+rad*Math.cos(a)).toFixed(1)+\" \"+(cy+rad*Math.sin(a)).toFixed(1); } return d+\"Z\"; }\nfunction tree(x,b,s){\n  const t=(y,hw,h,cls)=>`<polygon class=\"${cls}\" points=\"${x-hw},${y} ${x+hw},${y} ${x},${y-h}\"/>`;\n  return `<g><rect class=\"trunk\" x=\"${x-4*s}\" y=\"${b-9*s}\" width=\"${8*s}\" height=\"${11*s}\"/>\n  ${t(b-7*s,22*s,26*s,\"tree-d\")}${t(b-20*s,18*s,24*s,\"tree\")}${t(b-33*s,13*s,22*s,\"tree\")}\n  <circle class=\"bauble-r\" cx=\"${x-9*s}\" cy=\"${b-12*s}\" r=\"${2.6*s}\"/><circle class=\"bauble-g\" cx=\"${x+8*s}\" cy=\"${b-16*s}\" r=\"${2.4*s}\"/>\n  <circle class=\"bauble-g\" cx=\"${x-5*s}\" cy=\"${b-27*s}\" r=\"${2.2*s}\"/><circle class=\"bauble-r\" cx=\"${x+5*s}\" cy=\"${b-36*s}\" r=\"${2*s}\"/>\n  <path class=\"star\" d=\"${starPath(x,b-56*s,6*s,2.6*s)}\"/></g>`;\n}\nfunction silDeer(x,y){\n  return `<ellipse cx=\"${x}\" cy=\"${y}\" rx=\"11\" ry=\"4.5\"/><circle cx=\"${x-12}\" cy=\"${y-5}\" r=\"3.5\"/>\n  <path d=\"M${x-8} ${y} L${x-14} ${y+7} M${x-3} ${y+3} L${x-5} ${y+9} M${x+6} ${y+2} L${x+11} ${y+8} M${x+9} ${y} L${x+16} ${y+5} M${x-12} ${y-8} L${x-15} ${y-14} M${x-12} ${y-8} L${x-8} ${y-14}\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\"/>`;\n}\nfunction sceneSVG(){\n  const stars=[[40,22],[95,48],[150,18],[230,36],[300,14],[350,52],[400,24],[560,70],[20,70],[270,64]]\n    .map(([x,y])=>`<circle class=\"sky-star\" cx=\"${x}\" cy=\"${y}\" r=\"1.6\"/>`).join(\"\");\n  const sleigh=`<g class=\"sleigh\" style=\"color:var(--gold-soft)\"><g fill=\"currentColor\" opacity=\".9\" transform=\"translate(160 0) scale(-1 1)\">\n    ${silDeer(60,40)}${silDeer(30,40)}\n    <path d=\"M70 38 L84 40\" stroke=\"currentColor\" stroke-width=\"1\"/>\n    <g transform=\"translate(212 0) scale(-1 1)\"><path d=\"M84 36 Q86 48 96 48 L118 48 Q124 48 124 42 L122 34 L110 36 L104 30 Q96 28 92 36 Z\"/>\n    <path d=\"M82 52 L124 52 Q130 52 130 46\" stroke=\"currentColor\" stroke-width=\"2\" fill=\"none\" stroke-linecap=\"round\"/>\n    <circle cx=\"106\" cy=\"26\" r=\"4\"/><path d=\"M102 24 L108 14 L113 22 Z\"/></g></g></g>`;\n  const santa=`<g>\n    <rect class=\"belt\" x=\"99\" y=\"166\" width=\"9\" height=\"16\" rx=\"2\"/><rect class=\"belt\" x=\"112\" y=\"166\" width=\"9\" height=\"16\" rx=\"2\"/>\n    <ellipse class=\"santa-red\" cx=\"89\" cy=\"146\" rx=\"6\" ry=\"13\" transform=\"rotate(20 89 146)\"/><circle class=\"belt\" cx=\"85\" cy=\"158\" r=\"4.5\"/>\n    <ellipse class=\"santa-red\" cx=\"110\" cy=\"150\" rx=\"22\" ry=\"24\"/>\n    <rect class=\"fur\" x=\"89\" y=\"166\" width=\"42\" height=\"7\" rx=\"3.5\"/><rect class=\"fur\" x=\"107\" y=\"128\" width=\"6\" height=\"40\" rx=\"3\"/>\n    <rect class=\"belt\" x=\"88\" y=\"148\" width=\"44\" height=\"7\"/><rect class=\"buckle\" x=\"104\" y=\"146.5\" width=\"12\" height=\"10\" rx=\"1.5\"/><rect class=\"belt\" x=\"107\" y=\"149\" width=\"6\" height=\"5\"/>\n    <g class=\"wave\"><ellipse class=\"santa-red\" cx=\"134\" cy=\"134\" rx=\"6\" ry=\"13\" transform=\"rotate(-35 134 134)\"/><circle class=\"belt\" cx=\"141\" cy=\"123\" r=\"4.5\"/></g>\n    <circle class=\"skin\" cx=\"110\" cy=\"120\" r=\"14\"/>\n    <path class=\"fur\" d=\"M96 120 Q95 143 110 148 Q125 143 124 120 Q110 130 96 120Z\"/>\n    <ellipse class=\"fur\" cx=\"105\" cy=\"127\" rx=\"5.5\" ry=\"3\"/><ellipse class=\"fur\" cx=\"115\" cy=\"127\" rx=\"5.5\" ry=\"3\"/>\n    <circle class=\"cheek\" cx=\"101\" cy=\"121\" r=\"2.6\"/><circle class=\"cheek\" cx=\"119\" cy=\"121\" r=\"2.6\"/><circle class=\"cheek\" cx=\"110\" cy=\"123\" r=\"2.6\"/>\n    <circle class=\"ink\" cx=\"105\" cy=\"116\" r=\"1.7\"/><circle class=\"ink\" cx=\"115\" cy=\"116\" r=\"1.7\"/>\n    <path class=\"santa-red\" d=\"M95 111 Q104 86 124 92 L128 99 L125 111 Z\"/>\n    <circle class=\"fur\" cx=\"129\" cy=\"98\" r=\"5\"/><rect class=\"fur\" x=\"93\" y=\"107\" width=\"34\" height=\"8\" rx=\"4\"/></g>`;\n  const deer=`<g>\n    <rect class=\"deer-d\" x=\"439\" y=\"158\" width=\"5\" height=\"25\" rx=\"2\"/><rect class=\"deer-d\" x=\"448\" y=\"160\" width=\"5\" height=\"23\" rx=\"2\"/>\n    <rect class=\"deer-d\" x=\"468\" y=\"160\" width=\"5\" height=\"23\" rx=\"2\"/><rect class=\"deer-d\" x=\"477\" y=\"158\" width=\"5\" height=\"25\" rx=\"2\"/>\n    <ellipse class=\"deer\" cx=\"460\" cy=\"155\" rx=\"27\" ry=\"13\"/><ellipse class=\"fur\" cx=\"487\" cy=\"149\" rx=\"4\" ry=\"5\"/>\n    <polygon class=\"deer\" points=\"436,154 448,150 441,126 430,128\"/>\n    <rect class=\"santa-red\" x=\"432\" y=\"140\" width=\"15\" height=\"6\" rx=\"3\" transform=\"rotate(-12 440 143)\"/><circle class=\"buckle\" cx=\"438\" cy=\"149\" r=\"3\"/>\n    <path class=\"antler\" d=\"M430 118 L424 101 L415 95 M424 102 L429 92 M437 118 L441 100 L449 93 M441 101 L437 92\"/>\n    <ellipse class=\"deer\" cx=\"428\" cy=\"125\" rx=\"12\" ry=\"8.5\"/><ellipse class=\"deer\" cx=\"417\" cy=\"129\" rx=\"8\" ry=\"5.5\"/>\n    <ellipse class=\"deer-d\" cx=\"437\" cy=\"117\" rx=\"5\" ry=\"3\" transform=\"rotate(-30 437 117)\"/>\n    <circle class=\"ink\" cx=\"410\" cy=\"128\" r=\"3.2\"/><circle class=\"ink\" cx=\"426\" cy=\"122\" r=\"1.8\"/></g>`;\n  const gifts=`<g><rect class=\"bauble-r\" x=\"262\" y=\"164\" width=\"20\" height=\"16\" rx=\"2\"/><rect class=\"buckle\" x=\"270\" y=\"164\" width=\"4\" height=\"16\"/>\n    <rect class=\"bauble-g\" x=\"284\" y=\"168\" width=\"16\" height=\"12\" rx=\"2\"/><rect class=\"santa-red\" x=\"290\" y=\"168\" width=\"4\" height=\"12\"/></g>`;\n  return `<svg class=\"scene\" viewBox=\"0 0 580 205\" role=\"img\" aria-label=\"Santa waving beside snowy Christmas trees and a reindeer, with a sleigh flying past the moon\">\n    ${stars}<circle class=\"moon\" cx=\"505\" cy=\"42\" r=\"20\"/>${sleigh}\n    <path class=\"hill2\" d=\"M0 172 Q150 128 300 158 T580 146 V205 H0Z\"/>\n    ${tree(30,170,1.05)}${tree(205,162,0.8)}${tree(355,160,0.9)}${tree(548,156,1.1)}\n    <path class=\"hill\" d=\"M0 186 Q200 152 380 180 T580 172 V205 H0Z\"/>\n    ${tree(250,182,1.2)}${gifts}${santa}${deer}</svg>`;\n}\nfunction lightsSVG(){\n  const cols=[\"var(--red)\",\"var(--gold)\",\"var(--green)\",\"#BFE6FF\"]; let bulbs=\"\";\n  for(let i=0;i<24;i++){ const x=12+i*24, y=5+15*Math.sin(Math.PI*((x%145)/145)); bulbs+=`<ellipse class=\"bulb\" cx=\"${x}\" cy=\"${(y+7).toFixed(1)}\" rx=\"4\" ry=\"6\" fill=\"${cols[i%4]}\"/>`; }\n  return `<svg class=\"lights\" viewBox=\"0 0 580 30\" preserveAspectRatio=\"none\" aria-hidden=\"true\"><path d=\"M0 5 Q72 35 145 5 T290 5 T435 5 T580 5\" stroke=\"#6E8B7E\" stroke-width=\"1.5\" fill=\"none\"/><g>${bulbs}</g></svg>`;\n}\nfunction giftSVG(extra){\n  return `<svg class=\"giftbox ${extra||\"\"}\" viewBox=\"0 0 150 150\" aria-hidden=\"true\">\n    <rect x=\"20\" y=\"62\" width=\"110\" height=\"80\" rx=\"6\" fill=\"var(--red)\"/><rect x=\"20\" y=\"62\" width=\"110\" height=\"10\" fill=\"var(--red-deep)\"/>\n    <rect x=\"68\" y=\"62\" width=\"14\" height=\"80\" fill=\"var(--gold)\"/>\n    <g class=\"lid\"><rect x=\"12\" y=\"46\" width=\"126\" height=\"22\" rx=\"5\" fill=\"var(--red-deep)\"/><rect x=\"68\" y=\"46\" width=\"14\" height=\"22\" fill=\"var(--gold)\"/>\n    <ellipse cx=\"60\" cy=\"38\" rx=\"15\" ry=\"9\" fill=\"var(--gold)\" transform=\"rotate(-20 60 38)\"/><ellipse cx=\"90\" cy=\"38\" rx=\"15\" ry=\"9\" fill=\"var(--gold)\" transform=\"rotate(20 90 38)\"/>\n    <circle cx=\"75\" cy=\"42\" r=\"6\" fill=\"var(--gold-soft)\"/></g></svg>`;\n}\nconst HOLLY = `<svg class=\"holly\" width=\"54\" height=\"22\" viewBox=\"0 0 54 22\" aria-hidden=\"true\"><path d=\"M27 11 Q16 0 4 6 Q8 9 6 13 Q12 12 14 17 Q20 12 27 11Z\" fill=\"#1D6B43\"/><path d=\"M27 11 Q38 0 50 6 Q46 9 48 13 Q42 12 40 17 Q34 12 27 11Z\" fill=\"#2F9A62\"/><circle cx=\"24\" cy=\"12\" r=\"3.4\" fill=\"#D7263D\"/><circle cx=\"30\" cy=\"12\" r=\"3.4\" fill=\"#D7263D\"/><circle cx=\"27\" cy=\"7.5\" r=\"3.4\" fill=\"#A51C30\"/></svg>`;\n\n/* ---------- snow ---------- */\nfunction startSnow(){\n  const c=document.createElement(\"canvas\"); c.id=\"snow\"; c.setAttribute(\"aria-hidden\",\"true\"); document.body.prepend(c);\n  const ctx=c.getContext(\"2d\"); let W=0,H=0,flakes=[];\n  const size=()=>{ const d=Math.min(window.devicePixelRatio||1,2); W=innerWidth; H=innerHeight; c.width=W*d; c.height=H*d; ctx.setTransform(d,0,0,d,0,0);\n    const n=Math.round(Math.min(110,W*H/9000)); flakes=Array.from({length:n},()=>({x:Math.random()*W,y:Math.random()*H,r:.8+Math.random()*2.4,vy:.3+Math.random()*.8,ph:Math.random()*6})); };\n  const draw=()=>{ ctx.clearRect(0,0,W,H); ctx.fillStyle=\"rgba(255,255,255,.85)\"; for(const f of flakes){ ctx.globalAlpha=.35+f.r/4; ctx.beginPath(); ctx.arc(f.x,f.y,f.r,0,7); ctx.fill(); } ctx.globalAlpha=1; };\n  size(); addEventListener(\"resize\",()=>{ size(); if(REDUCED) draw(); });\n  if (REDUCED){ draw(); return; }\n  let t=0; const tick=()=>{ t+=.01; for(const f of flakes){ f.y+=f.vy; f.x+=Math.sin(t*2+f.ph)*.35; if(f.y>H+4){ f.y=-4; f.x=Math.random()*W; } } draw(); requestAnimationFrame(tick); };\n  requestAnimationFrame(tick);\n}\n\n/* ---------- fireworks & sparkles ---------- */\nconst FX={c:null,ctx:null,parts:[],rockets:[],running:false,W:0,H:0};\nfunction fxInit(){\n  if (FX.c) return; const c=document.createElement(\"canvas\"); c.id=\"fx\"; c.setAttribute(\"aria-hidden\",\"true\"); document.body.appendChild(c);\n  FX.c=c; FX.ctx=c.getContext(\"2d\");\n  const size=()=>{ const d=Math.min(window.devicePixelRatio||1,2); FX.W=innerWidth; FX.H=innerHeight; c.width=FX.W*d; c.height=FX.H*d; FX.ctx.setTransform(d,0,0,d,0,0); };\n  size(); addEventListener(\"resize\",size);\n}\nconst FX_COLS=[\"#F2C14E\",\"#FFE7A3\",\"#D7263D\",\"#FF6B7D\",\"#7EE0A6\",\"#FFFFFF\",\"#BFE6FF\"];\nfunction burst(x,y,n){\n  const base=FX_COLS[Math.floor(Math.random()*FX_COLS.length)];\n  for(let i=0;i<n;i++){ const a=Math.random()*Math.PI*2, s=1.2+Math.random()*4.2;\n    FX.parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1,decay:.008+Math.random()*.014,col:Math.random()<.7?base:FX_COLS[Math.floor(Math.random()*FX_COLS.length)],r:1.2+Math.random()*1.8,spark:Math.random()<.18}); }\n}\nfunction sparkleRain(cx,cy,n){\n  for(let i=0;i<n;i++) FX.parts.push({x:cx+(Math.random()-.5)*260,y:cy+(Math.random()-.5)*160,vx:(Math.random()-.5)*.6,vy:-.2-Math.random()*.6,life:1,decay:.01+Math.random()*.012,col:Math.random()<.6?\"#FFE7A3\":\"#FFFFFF\",r:2+Math.random()*2.5,spark:true});\n}\nfunction launch(tx,ty,delay){ setTimeout(()=>{ FX.rockets.push({x:tx+(Math.random()-.5)*60,y:FX.H+10,tx,ty,trail:[]}); fxRun(); },delay); }\nfunction drawSpark(ctx,x,y,r){ ctx.beginPath(); ctx.moveTo(x,y-r*2.2); ctx.lineTo(x+r*.5,y-r*.5); ctx.lineTo(x+r*2.2,y); ctx.lineTo(x+r*.5,y+r*.5); ctx.lineTo(x,y+r*2.2); ctx.lineTo(x-r*.5,y+r*.5); ctx.lineTo(x-r*2.2,y); ctx.lineTo(x-r*.5,y-r*.5); ctx.closePath(); ctx.fill(); }\nfunction fxRun(){\n  if (FX.running) return; FX.running=true;\n  const ctx=FX.ctx;\n  const step=()=>{\n    ctx.clearRect(0,0,FX.W,FX.H); ctx.globalCompositeOperation=\"lighter\";\n    for(let i=FX.rockets.length-1;i>=0;i--){ const r=FX.rockets[i]; const dy=(r.ty-r.y)*.075; r.y+=Math.min(dy,-3); r.x+=(r.tx-r.x)*.06;\n      r.trail.push([r.x,r.y]); if(r.trail.length>10) r.trail.shift();\n      r.trail.forEach(([x,y],k)=>{ ctx.globalAlpha=k/10; ctx.fillStyle=\"#FFE7A3\"; ctx.beginPath(); ctx.arc(x,y,1.8,0,7); ctx.fill(); });\n      if (r.y<=r.ty+4){ burst(r.x,r.y,90); FX.rockets.splice(i,1); } }\n    for(let i=FX.parts.length-1;i>=0;i--){ const p=FX.parts[i]; p.vx*=.985; p.vy=p.vy*.985+.045; p.x+=p.vx; p.y+=p.vy; p.life-=p.decay;\n      if(p.life<=0){ FX.parts.splice(i,1); continue; }\n      ctx.globalAlpha=Math.max(0,p.life)*(p.spark?(.5+.5*Math.sin(p.life*40)):1); ctx.fillStyle=p.col;\n      if(p.spark) drawSpark(ctx,p.x,p.y,p.r); else { ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,7); ctx.fill(); } }\n    ctx.globalAlpha=1; ctx.globalCompositeOperation=\"source-over\";\n    if (FX.parts.length||FX.rockets.length) requestAnimationFrame(step); else { ctx.clearRect(0,0,FX.W,FX.H); FX.running=false; }\n  };\n  requestAnimationFrame(step);\n}\nfunction celebrate(el){\n  if (REDUCED) return; fxInit();\n  const b=el.getBoundingClientRect(), cx=b.left+b.width/2, cy=b.top+b.height/2, W=FX.W;\n  burst(cx,cy,140); sparkleRain(cx,cy,40); fxRun();\n  launch(W*.2,Math.max(80,cy-170),250); launch(W*.8,Math.max(70,cy-200),550);\n  launch(W*.5,Math.max(60,cy-230),900); launch(W*.3,Math.max(90,cy-120),1300); launch(W*.7,Math.max(90,cy-140),1650);\n  setTimeout(()=>{ const t=el.getBoundingClientRect(); sparkleRain(t.left+t.width/2,t.top+t.height/2,50); fxRun(); },1200);\n}\n</script>\n<script>/* Family Secret Santa — front end. Talks to the Google Apps Script backend in apps-script/Code.gs. */\n(function () {\n\"use strict\";\n\n// BACKUP is set when Apps Script serves this page itself (doGet in Code.gs); calls then go through google.script.run.\nconst BACKUP = window.SS_BACKUP || null;\nconst API = BACKUP ? \"apps-script\" : String(window.SECRET_SANTA_API || \"\").trim();\nconst app = document.getElementById(\"app\");\nconst params = new URLSearchParams(location.search);\nconst urlCode = params.get(\"code\") || (BACKUP && BACKUP.code) || \"\";\nconst PAGE_URL = BACKUP && BACKUP.url ? BACKUP.url : location.origin + location.pathname;\n\nlet STATUS = null;          // public status from the server\nlet view = params.has(\"organiser\") || (BACKUP && BACKUP.organiser) ? \"organiser\" : \"main\";\nlet admin = null;           // organiser view data\nlet adminPw = \"\";\nlet flash = null;           // {kind,en,sv,where}\nlet resetArmed = false;\nlet revealed = false;\nlet codes = null;           // organiser's \"Show codes\" list (names + codes only)\nlet matches = null;         // {name: match}, filled only after \"Show who has whom\" is confirmed\nlet matchArmed = false;\n\n/* ---------- helpers ---------- */\nconst esc = s => String(s ?? \"\").replace(/[&<>\"']/g, c => ({\"&\":\"&amp;\",\"<\":\"&lt;\",\">\":\"&gt;\",'\"':\"&quot;\",\"'\":\"&#39;\"}[c]));\nconst bi = (en, sv) => `<span class=\"en\">${en}</span><span class=\"sv\" lang=\"sv\">${sv}</span>`;\nconst bil = (en, sv) => `<span class=\"bil\">${en} <span class=\"sv-inline\" lang=\"sv\"><span class=\"dot\">· </span>${sv}</span></span>`;\nconst fmtCode = s => { const c = String(s || \"\").toUpperCase().replace(/[^A-Z0-9]/g, \"\").slice(0, 8); return c.length > 4 ? c.slice(0, 4) + \"-\" + c.slice(4) : c; };\nfunction setFlash(kind, en, sv, where) { flash = { kind, en, sv, where: where || \"\" }; }\nfunction flashHTML(where) { return flash && flash.where === (where || \"\") ? `<div class=\"msg ${flash.kind}\" role=\"status\">${bi(esc(flash.en), esc(flash.sv))}</div>` : \"\"; }\nclass BiError extends Error { constructor(en, sv) { super(en); this.sv = sv; } }\n\nconst ERRORS = {\n  not_drawn: [\"The names haven't been drawn yet.\", \"Namnen är inte dragna än.\"],\n  not_found: [\"That email isn't on the list. Use the address the organiser has for you.\", \"Den e-postadressen finns inte på listan. Använd adressen som arrangören har.\"],\n  bad_email: [\"Check the email address{d}.\", \"Kontrollera e-postadressen{d}.\"],\n  too_many: [\"Too many tries. Wait a little while and try again.\", \"För många försök. Vänta en stund och försök igen.\"],\n  bad_code: [\"That code doesn't match. Check it against your email.\", \"Koden stämmer inte. Jämför med ditt mejl.\"],\n  bad_password: [\"That password doesn't match.\", \"Fel lösenord.\"],\n  set_password: [\"Set ADMIN_PASSWORD in the Apps Script (Code.gs) and deploy a new version first.\", \"Ändra ADMIN_PASSWORD i Apps Script (Code.gs) och publicera en ny version först.\"],\n  already_drawn: [\"The names are already drawn. Clear the draw first to change anything.\", \"Namnen är redan dragna. Rensa dragningen först för att ändra.\"],\n  too_few: [\"Add at least 3 people. With 2 they'd just swap.\", \"Lägg till minst 3 personer. Med 2 byter de bara med varandra.\"],\n  too_many_people: [\"That's more people than this app handles (60).\", \"Det är fler personer än appen klarar (60).\"],\n  need_name: [\"Every person needs a name.\", \"Alla behöver ett namn.\"],\n  dup_name: [\"Two people are called {d}. Add a surname or initial.\", \"Två personer heter {d}. Lägg till efternamn eller initial.\"],\n  dup_email: [\"Two people share {d}. Each person needs their own email.\", \"Två personer har {d}. Alla behöver en egen e-postadress.\"],\n  no_app_url: [\"Fill in the link to this page.\", \"Fyll i länken till sidan.\"],\n  draw_failed: [\"The draw failed its checks. Nothing was saved; try again.\", \"Dragningen klarade inte kontrollen. Inget sparades; försök igen.\"],\n  quota: [\"Gmail's daily sending limit is used up. Try again tomorrow.\", \"Gmails dagliga gräns för utskick är nådd. Försök igen i morgon.\"],\n};\nfunction errFor(j) {\n  const e = ERRORS[j.error];\n  if (!e) return new BiError(\"Something went wrong\" + (j.message ? \": \" + j.message : \"\") + \". Try again.\", \"Något gick fel. Försök igen.\");\n  const d = j.message && j.message !== j.error ? j.message : \"\";\n  const fill = (s, pre) => s.replace(\"{d}\", d ? (pre ? pre + d : d) : \"\");\n  if (j.error === \"bad_email\") return new BiError(fill(e[0], \" for \"), fill(e[1], \" för \"));\n  return new BiError(fill(e[0]), fill(e[1]));\n}\n\nasync function api(action, data) {\n  if (!API) throw new BiError(\"This page isn't connected to its backend yet (config.js).\", \"Sidan är inte kopplad till sin backend än (config.js).\");\n  let res, j;\n  if (BACKUP) {\n    try {\n      j = await new Promise((resolve, reject) => google.script.run\n        .withSuccessHandler(txt => { try { resolve(JSON.parse(txt)); } catch (e) { reject(e); } })\n        .withFailureHandler(reject)\n        .apiCall(JSON.stringify(Object.assign({ action }, data || {}))));\n    } catch (e) { throw new BiError(\"Couldn't reach the server. Check your connection and try again.\", \"Kunde inte nå servern. Kontrollera anslutningen och försök igen.\"); }\n    if (!j.ok) throw errFor(j);\n    return j;\n  }\n  try {\n    // text/plain keeps this a \"simple\" request, so Apps Script needs no CORS preflight.\n    res = await fetch(API, { method: \"POST\", headers: { \"Content-Type\": \"text/plain;charset=utf-8\" }, body: JSON.stringify(Object.assign({ action }, data || {})) });\n  } catch (e) { throw new BiError(\"Couldn't reach the server. Check your connection and try again.\", \"Kunde inte nå servern. Kontrollera anslutningen och försök igen.\"); }\n  try { j = await res.json(); } catch (e) { throw new BiError(\"The server sent a strange reply. Is the Apps Script deployed with access for “Anyone”?\", \"Servern svarade konstigt. Är Apps Script publicerat för “Alla”?\"); }\n  if (!j.ok) throw errFor(j);\n  return j;\n}\nfunction busy(btn, en, sv) { const orig = btn.innerHTML; btn.disabled = true; btn.innerHTML = bil(en, sv); return () => { btn.disabled = false; btn.innerHTML = orig; }; }\n\n/* ---------- views ---------- */\nfunction headerHTML() {\n  const s = (admin || STATUS || {});\n  const chips = [s.budget && `Budget: ${esc(s.budget)}`, s.when && esc(s.when)].filter(Boolean).map(c => `<span class=\"chip\">${c}</span>`).join(\"\");\n  return `<header>${sceneSVG()}<span class=\"eyebrow\">Secret Santa</span><h1>${esc(s.eventName || \"Nordlander Family Secret Santa 2026\")}</h1>${chips ? `<div class=\"meta\">${chips}</div>` : \"\"}${lightsSVG()}</header>`;\n}\nconst organiserLink = () => `<div class=\"foot\"><button class=\"link\" data-act=\"organiser\">${bil(\"Organiser\", \"Arrangör\")}</button></div>`;\n\nfunction render() {\n  let body;\n  if (!API) body = notConfiguredHTML();\n  else if (view === \"organiser\") body = admin ? adminHTML() : unlockHTML();\n  else if (!STATUS) body = flash ? `<section class=\"panel\">${flashHTML()}<button class=\"ghost\" data-act=\"retry\">${bil(\"Try again\", \"Försök igen\")}</button></section>` : `<section class=\"panel\"><p class=\"muted\">${bi(\"Loading…\", \"Laddar…\")}</p></section>`;\n  else body = STATUS.status === \"drawn\" ? mainHTML() : waitingHTML();\n  app.innerHTML = headerHTML() + body;\n}\n\nfunction notConfiguredHTML() {\n  return `<section class=\"panel festive\"><h2>${bi(\"Almost there\", \"Nästan klart\")}</h2>\n  <p>${bi(\"This page needs its free Google Apps Script backend. Follow the steps in README.md, then paste the Web app URL into config.js.\",\n          \"Sidan behöver sin gratis Google Apps Script-backend. Följ stegen i README.md och klistra sedan in webbappens URL i config.js.\")}</p></section>`;\n}\n\nfunction waitingHTML() {\n  return `<section class=\"panel festive\"><div class=\"waiting\">${giftSVG()}<div style=\"display:flex;flex-direction:column;gap:10px\">\n  <h2>${bi(\"The names haven't been drawn yet\", \"Namnen är inte dragna än\")}</h2>\n  <p>${bi(\"Once everyone's in, the organiser will draw the names. Then come back here, enter your email, and you'll get a personal code that opens your present.\",\n          \"När alla är med drar arrangören namnen. Kom sedan tillbaka hit, skriv in din e-post, så får du en personlig kod som öppnar ditt paket.\")}</p></div></div></section>\n  ${organiserLink()}`;\n}\n\nfunction mainHTML() {\n  const codeFirst = !!urlCode;\n  const ask = `<section class=\"panel${codeFirst ? \"\" : \" festive\"}\" id=\"askPanel\"><h2>${bi(codeFirst ? \"Lost your code?\" : \"1. Get your code\", codeFirst ? \"Tappat bort koden?\" : \"1. Hämta din kod\")}</h2>\n  <p>${bi(\"Enter your email address and we'll send you your personal code and a link back here.\", \"Skriv in din e-postadress så skickar vi din personliga kod och en länk tillbaka hit.\")}</p>\n  <form id=\"askForm\" style=\"display:flex;flex-direction:column;gap:14px\">\n    <label for=\"email\">${bil(\"Your email\", \"Din e-post\")}<input id=\"email\" type=\"email\" autocomplete=\"email\" inputmode=\"email\" enterkeyhint=\"send\" autocapitalize=\"off\" spellcheck=\"false\" required placeholder=\"you@example.com\"></label>\n    <button class=\"${codeFirst ? \"ghost\" : \"primary\"} big\" type=\"submit\" id=\"askBtn\">${bil(\"Email me my code\", \"Mejla min kod\")}</button>\n  </form>${flashHTML(\"ask\")}</section>`;\n  const rev = `<section class=\"panel${codeFirst ? \" festive\" : \"\"}\" id=\"revealPanel\"><h2>${bi(codeFirst ? \"Who are you buying for?\" : \"2. Open your present\", codeFirst ? \"Vem ska du köpa till?\" : \"2. Öppna ditt paket\")}</h2>\n  <p>${bi(\"Enter the code from your email.\", \"Skriv in koden från ditt mejl.\")}</p>\n  <form id=\"revealForm\" style=\"display:flex;flex-direction:column;gap:14px\">\n    <label for=\"code\">${bil(\"Your code\", \"Din kod\")}<input id=\"code\" class=\"code-input\" autocomplete=\"one-time-code\" enterkeyhint=\"go\" autocapitalize=\"characters\" spellcheck=\"false\" placeholder=\"XXXX-XXXX\" maxlength=\"12\" required value=\"${esc(fmtCode(urlCode))}\"></label>\n    <button class=\"primary big\" type=\"submit\" id=\"revealBtn\">${bil(\"Your Secret Santa\", \"Din Secret Santa\")}</button>\n  </form>${flashHTML(\"reveal\")}<div id=\"tagOut\" aria-live=\"polite\"></div></section>`;\n  return (codeFirst ? rev + ask : ask + rev) + organiserLink();\n}\n\nfunction unlockHTML() {\n  return `<section class=\"panel festive\"><h2>${bi(\"Organiser\", \"Arrangör\")}</h2>\n  <p class=\"muted\">${bi(\"Enter the organiser password (the ADMIN_PASSWORD in your Apps Script).\", \"Ange arrangörens lösenord (ADMIN_PASSWORD i ditt Apps Script).\")}</p>\n  <form id=\"unlockForm\" style=\"display:flex;flex-direction:column;gap:14px\">\n  <label for=\"apw\">${bil(\"Password\", \"Lösenord\")}<input id=\"apw\" type=\"password\" autocomplete=\"current-password\" required></label>\n  <div class=\"actions\"><button class=\"primary\" type=\"submit\" id=\"unlockBtn\">${bil(\"Unlock\", \"Lås upp\")}</button><button class=\"link\" type=\"button\" data-act=\"back\">${bil(\"Back\", \"Tillbaka\")}</button></div></form>\n  ${flashHTML()}</section>`;\n}\n\nfunction personRow(p) {\n  return `<div class=\"person\" data-row><input aria-label=\"Name / Namn\" class=\"nm\" placeholder=\"Name / Namn\" value=\"${esc(p.name || \"\")}\">\n  <input aria-label=\"Email / E-post\" class=\"em\" type=\"email\" inputmode=\"email\" autocomplete=\"off\" placeholder=\"Email / E-post\" value=\"${esc(p.email || \"\")}\">\n  <button class=\"x\" title=\"Remove / Ta bort\" aria-label=\"Remove person\" data-act=\"rm\">×</button></div>`;\n}\n\nfunction adminHTML() { return admin.status === \"drawn\" ? adminDrawnHTML() : adminSetupHTML(); }\n\nfunction adminSetupHTML() {\n  const people = admin.people.length ? admin.people : [{}, {}, {}, {}];\n  return `<section class=\"panel festive\"><h2>${bi(\"Set up the draw\", \"Ställ in dragningen\")}</h2>\n  <p class=\"muted\">${bi(\"Add every adult taking part, including yourself. The draw makes one random chain through everyone, so each person gives one present and gets one, and nobody draws the person who drew them.\",\n    \"Lägg till alla vuxna som är med, även dig själv. Dragningen gör en slumpmässig kedja genom alla, så att var och en ger en julklapp och får en, och ingen drar den som drog dem.\")}</p>\n  <div class=\"row2\"><label for=\"evName\">${bil(\"Event name\", \"Namn\")}<input id=\"evName\" value=\"${esc(admin.eventName || \"\")}\"></label>\n  <label for=\"evBudget\">Budget<input id=\"evBudget\" placeholder=\"e.g. 400 kr\" value=\"${esc(admin.budget || \"\")}\"></label></div>\n  <div class=\"row2\"><label for=\"evWhen\">${bil(\"Gift exchange\", \"Julklappsutdelning\")}<input id=\"evWhen\" placeholder=\"Christmas Eve / Julafton\" value=\"${esc(admin.when || \"\")}\"></label>\n  <label for=\"evUrl\">${bil(\"Link to this page\", \"Länk till sidan\")}<input id=\"evUrl\" value=\"${esc(admin.appUrl || PAGE_URL)}\"></label></div></section>\n  <section class=\"panel\"><h2>${bi(\"Who's taking part\", \"Vilka är med\")}</h2>\n  <div class=\"people\" id=\"people\">${people.map(personRow).join(\"\")}</div>\n  <div class=\"actions\"><button class=\"ghost small\" data-act=\"addPerson\">+ ${bil(\"Add person\", \"Lägg till person\")}</button>\n  <button class=\"ghost small\" data-act=\"saveSetup\" id=\"saveBtn\">${bil(\"Save list\", \"Spara listan\")}</button></div></section>\n  <section class=\"panel\"><h2>${bi(\"Draw the names\", \"Dra namnen\")}</h2>\n  <p class=\"muted\">${bi(\"The server draws the names. Nobody, including you, sees who has whom in this app.\", \"Servern drar namnen. Ingen, inte ens du, ser vem som har vem i appen.\")}</p>\n  <label class=\"check\"><input type=\"checkbox\" id=\"notify\" checked>\n  ${bil(\"Email everyone their code right away\", \"Mejla allas koder direkt\")}</label>\n  ${flashHTML()}\n  <button class=\"primary big\" data-act=\"draw\" id=\"drawBtn\">${bil(\"Draw names and lock it in\", \"Dra namnen och lås\")}</button>\n  <div class=\"foot\"><button class=\"link\" data-act=\"lock\">${bil(\"Lock and go back\", \"Lås och gå tillbaka\")}</button></div></section>`;\n}\n\nfunction adminDrawnHTML() {\n  const when = t => t ? esc(new Date(t).toLocaleString(\"en-GB\", { dateStyle: \"medium\", timeStyle: \"short\" })) : \"\";\n  const checks = (admin.checks || []).map(c => `<li class=\"${c.ok ? \"\" : \"bad\"}\">${esc(c.en)} <span class=\"sv-inline\" lang=\"sv\">· ${esc(c.sv)}</span></li>`).join(\"\");\n  const rows = admin.people.map(p => `<li class=\"sentrow\"><span class=\"name\">${esc(p.name)}</span>${p.sentAt ? `<span class=\"ok-t\">✓ ${when(p.sentAt)}</span>` : `<span class=\"muted not-sent\">${bil(\"Not sent\", \"Ej skickad\")}</span>`}<span class=\"email\">${esc(p.email)}</span></li>`).join(\"\");\n  return `<section class=\"panel festive\"><h2>${bi(\"Names are drawn\", \"Namnen är dragna\")}</h2>${flashHTML()}<ul class=\"checks\">${checks}</ul>\n    <p class=\"muted\" style=\"font-size:14px\">${bil(\"Drawn\", \"Dragen\")} ${when(admin.drawnAt)}</p>\n    <p>${bi(\"Share this link with everyone. They enter their email and get their code:\", \"Dela länken med alla. De skriver in sin e-post och får sin kod:\")}</p>\n    <div class=\"mailtext\" style=\"font-size:15px\">${esc(admin.appUrl)}</div></section>\n  <section class=\"panel\"><h2>${bi(\"Codes emailed\", \"Skickade koder\")}</h2>\n    <ul class=\"sentlist\">${rows}</ul>\n    <p class=\"muted\" style=\"font-size:14px\">${bi(`Gmail can still send ${admin.quota} emails today.`, `Gmail kan skicka ${admin.quota} mejl till i dag.`)}</p>\n    <div class=\"actions\"><button class=\"ghost small\" data-act=\"emailAll\" id=\"emailAllBtn\">${bil(\"Email everyone their code\", \"Mejla allas koder\")}</button></div></section>\n  <section class=\"panel\"><h2>${bi(\"Event details\", \"Detaljer\")}</h2>\n    <p class=\"muted\">${bi(\"Change the name, budget or date any time. The draw and everyone's codes stay the same.\", \"Ändra namn, budget eller datum när som helst. Dragningen och allas koder påverkas inte.\")}</p>\n    <label for=\"dName\">${bil(\"Event name\", \"Namn\")}<input id=\"dName\" value=\"${esc(admin.eventName || \"\")}\"></label>\n    <div class=\"row2\"><label for=\"dBudget\">Budget<input id=\"dBudget\" value=\"${esc(admin.budget || \"\")}\"></label>\n    <label for=\"dWhen\">${bil(\"Gift exchange\", \"Julklappsutdelning\")}<input id=\"dWhen\" value=\"${esc(admin.when || \"\")}\"></label></div>\n    <div class=\"actions\"><button class=\"ghost small\" data-act=\"saveDetails\" id=\"saveDetailsBtn\">${bil(\"Save details\", \"Spara detaljer\")}</button></div></section>\n  <section class=\"panel\"><h2>${bi(\"Everyone's codes\", \"Allas koder\")}</h2>\n    <p class=\"muted\">${bi(\"Names and codes. Who has whom stays hidden unless you ask for it. Careful: entering someone else's code on the page also shows their match.\", \"Namn och koder. Vem som har vem visas bara om du ber om det. Obs: skriver man in någon annans kod på sidan visas också vem de har.\")}</p>\n    ${codes ? `<ul class=\"sentlist\">${codes.map(c => `<li class=\"sentrow\"><span class=\"name\">${esc(c.name)}${matches ? ` <span class=\"arrow-to\">→ ${esc(matches[c.name] || \"?\")}</span>` : \"\"}</span><span class=\"codebadge\">${esc(c.code)}</span></li>`).join(\"\")}</ul>\n    <div class=\"actions\"><button class=\"ghost small\" data-act=\"hideCodes\">${bil(\"Hide codes\", \"Dölj koderna\")}</button>\n    ${matches ? `<button class=\"ghost small\" data-act=\"hideMatches\">${bil(\"Hide who has whom\", \"Dölj vem som har vem\")}</button>`\n      : `<button class=\"${matchArmed ? \"danger\" : \"ghost\"} small\" data-act=\"showMatches\" id=\"showMatchesBtn\">${matchArmed ? bil(\"Tap again: this spoils your own match\", \"Tryck igen: du ser vem du själv har\") : bil(\"Show who has whom\", \"Visa vem som har vem\")}</button>${matchArmed ? `<button class=\"link\" data-act=\"cancelMatches\">${bil(\"Cancel\", \"Avbryt\")}</button>` : \"\"}`}</div>`\n    : `<div class=\"actions\"><button class=\"ghost small\" data-act=\"showCodes\" id=\"showCodesBtn\">${bil(\"Show codes\", \"Visa koderna\")}</button></div>`}</section>\n  <section class=\"panel\"><h2>${bi(\"Start over\", \"Börja om\")}</h2>\n    <p class=\"muted\">${bi(\"Clears this draw for everyone. Codes already sent stop working. The list of people is kept.\", \"Rensar dragningen för alla. Skickade koder slutar fungera. Listan med personer sparas.\")}</p>\n    <div class=\"actions\"><button class=\"danger small\" data-act=\"reset\" id=\"resetBtn\">${resetArmed ? bil(\"Tap again to clear\", \"Tryck igen för att rensa\") : bil(\"Clear the draw\", \"Rensa dragningen\")}</button>${resetArmed ? `<button class=\"link\" data-act=\"cancelReset\">${bil(\"Cancel\", \"Avbryt\")}</button>` : \"\"}</div></section>\n  <div class=\"foot\"><button class=\"link\" data-act=\"lock\">${bil(\"Lock and go back\", \"Lås och gå tillbaka\")}</button></div>`;\n}\n\n/* ---------- actions ---------- */\nasync function loadStatus() {\n  flash = null; render();\n  try { STATUS = await api(\"status\"); }\n  catch (e) { setFlash(\"err\", e.message, e.sv || \"\"); }\n  render();\n}\n\nasync function doAsk(btn) {\n  const email = document.getElementById(\"email\").value.trim();\n  const done = busy(btn, \"Sending…\", \"Skickar…\");\n  try {\n    await api(\"requestCode\", { email });\n    setFlash(\"ok\", `Sent! Check ${email} (and the spam folder) for your code.`, `Skickat! Titta i ${email} (och skräpposten) efter din kod.`, \"ask\");\n  } catch (e) { setFlash(\"err\", e.message, e.sv || \"\", \"ask\"); }\n  done(); rerenderKeeping();\n}\n\nasync function doReveal(btn) {\n  const raw = document.getElementById(\"code\").value;\n  const out = document.getElementById(\"tagOut\");\n  const done = busy(btn, \"Checking…\", \"Kontrollerar…\");\n  let r;\n  try { r = await api(\"reveal\", { code: raw }); }\n  catch (e) { setFlash(\"err\", e.message, e.sv || \"\", \"reveal\"); done(); rerenderKeeping(); return; }\n  if (flash) { flash = null; document.querySelectorAll(\"#revealPanel .msg\").forEach(m => m.remove()); }\n  done(); revealed = true;\n  const tagHTML = () => {\n    const letters = Array.from(r.to).map((ch, i) => `<span style=\"animation-delay:${(0.35 + i * 0.06).toFixed(2)}s\">${ch === \" \" ? \"&nbsp;\" : esc(ch)}</span>`).join(\"\");\n    return `<div class=\"tagwrap\"><div class=\"tag\"><span class=\"lbl\">${bil(\"You're buying for\", \"Du köper till\")}</span>\n      <span class=\"who\" aria-label=\"${esc(r.to)}\">${letters}</span>${HOLLY}\n      <span class=\"from\">${bil(\"From\", \"Från\")} ${esc(r.giver)}${r.budget ? ` · ${esc(r.budget)}` : \"\"}</span></div></div>\n      <p class=\"after muted\">${bi(\"Close this page when you're done. Keep it secret!\", \"Stäng sidan när du är klar. Håll det hemligt!\")}</p>`;\n  };\n  if (REDUCED) { out.innerHTML = tagHTML(); return; }\n  out.innerHTML = `<div class=\"stage\">${giftSVG(\"shake\")}<span class=\"hint\">${bil(\"Shaking the present…\", \"Skakar på paketet…\")}</span></div>`;\n  try { out.scrollIntoView({ behavior: \"smooth\", block: \"center\" }); } catch (e) {}\n  const box = out.querySelector(\".giftbox\");\n  setTimeout(() => { box.classList.remove(\"shake\"); box.classList.add(\"open\"); const h = out.querySelector(\".hint\"); if (h) h.remove(); celebrate(box); }, 950);\n  setTimeout(() => { out.innerHTML = tagHTML(); const t = out.querySelector(\".tag\"); setTimeout(() => celebrate(t), 500); }, 1550);\n}\n\n/* re-render the main view without losing what was typed */\nfunction rerenderKeeping() {\n  const e = document.getElementById(\"email\"), c = document.getElementById(\"code\");\n  const ev = e ? e.value : \"\", cv = c ? c.value : \"\";\n  render();\n  const e2 = document.getElementById(\"email\"), c2 = document.getElementById(\"code\");\n  if (e2) e2.value = ev; if (c2) c2.value = cv;\n}\n\nasync function doUnlock(btn) {\n  const pw = document.getElementById(\"apw\").value;\n  const done = busy(btn, \"Unlocking…\", \"Låser upp…\");\n  try { admin = await api(\"admin.get\", { password: pw }); adminPw = pw; flash = null; }\n  catch (e) { admin = null; setFlash(\"err\", e.message, e.sv || \"\"); }\n  done(); render();\n}\n\nfunction readSetup() {\n  const people = Array.from(document.querySelectorAll(\"[data-row]\")).map(r => ({ name: r.querySelector(\".nm\").value.trim(), email: r.querySelector(\".em\").value.trim() }));\n  const g = id => document.getElementById(id).value.trim();\n  return { people, eventName: g(\"evName\"), budget: g(\"evBudget\"), when: g(\"evWhen\"), appUrl: g(\"evUrl\") };\n}\n\nasync function adminCall(btn, action, data, en, sv, okMsg) {\n  const done = busy(btn, en, sv);\n  try {\n    admin = await api(action, Object.assign({ password: adminPw }, data || {}));\n    flash = okMsg ? okMsg(admin) : null;\n    if (STATUS) STATUS = Object.assign(STATUS, { status: admin.status, eventName: admin.eventName, budget: admin.budget, when: admin.when });\n  } catch (e) {\n    setFlash(\"err\", e.message, e.sv || \"\");\n    if (data && data.people) admin = Object.assign({}, admin, data); // keep what was typed\n  }\n  done(); resetArmed = false; render();\n}\n\napp.addEventListener(\"click\", ev => {\n  const el = ev.target.closest(\"[data-act]\"); if (!el) return;\n  const act = el.dataset.act; ev.preventDefault();\n  if (act === \"organiser\") { view = \"organiser\"; flash = null; render(); }\n  else if (act === \"back\" || act === \"lock\") { view = \"main\"; admin = null; adminPw = \"\"; codes = null; matches = null; matchArmed = false; flash = null; resetArmed = false; loadStatus(); }\n  else if (act === \"retry\") loadStatus();\n  else if (act === \"addPerson\") { document.getElementById(\"people\").insertAdjacentHTML(\"beforeend\", personRow({})); document.querySelector(\"#people [data-row]:last-child .nm\").focus(); }\n  else if (act === \"rm\") el.closest(\"[data-row]\").remove();\n  else if (act === \"saveDetails\") {\n    const g = id => document.getElementById(id).value.trim();\n    adminCall(el, \"admin.details\", { eventName: g(\"dName\"), budget: g(\"dBudget\"), when: g(\"dWhen\") }, \"Saving…\", \"Sparar…\",\n      () => ({ kind: \"ok\", en: \"Details saved. The draw is unchanged.\", sv: \"Detaljerna är sparade. Dragningen är oförändrad.\", where: \"\" }));\n  }\n  else if (act === \"saveSetup\") adminCall(el, \"admin.save\", readSetup(), \"Saving…\", \"Sparar…\", () => ({ kind: \"ok\", en: \"List saved.\", sv: \"Listan är sparad.\", where: \"\" }));\n  else if (act === \"draw\") {\n    const notify = document.getElementById(\"notify\").checked;\n    adminCall(el, \"admin.draw\", Object.assign(readSetup(), { notify }), \"Drawing…\", \"Drar…\",\n      a => a.sent ? { kind: \"ok\", en: `Names drawn and ${a.sent} emails sent!`, sv: `Namnen är dragna och ${a.sent} mejl skickade!`, where: \"\" }\n                  : { kind: \"ok\", en: \"Names drawn! Share the link so everyone can get their code.\", sv: \"Namnen är dragna! Dela länken så att alla kan hämta sin kod.\", where: \"\" });\n  }\n  else if (act === \"emailAll\") adminCall(el, \"admin.emailAll\", null, \"Sending…\", \"Skickar…\", a => ({ kind: \"ok\", en: `${a.sent} emails sent.`, sv: `${a.sent} mejl skickade.`, where: \"\" }));\n  else if (act === \"reset\") { if (!resetArmed) { resetArmed = true; render(); return; } codes = null; matches = null; matchArmed = false; adminCall(el, \"admin.reset\", null, \"Clearing…\", \"Rensar…\", () => ({ kind: \"ok\", en: \"Draw cleared.\", sv: \"Dragningen är rensad.\", where: \"\" })); }\n  else if (act === \"cancelReset\") { resetArmed = false; render(); }\n  else if (act === \"showCodes\") {\n    const done = busy(el, \"Loading…\", \"Laddar…\");\n    api(\"admin.codes\", { password: adminPw })\n      .then(r => { codes = r.codes; flash = null; })\n      .catch(e => setFlash(\"err\", e.message, e.sv || \"\"))\n      .then(() => { done(); render(); });\n  }\n  else if (act === \"hideCodes\") { codes = null; matches = null; matchArmed = false; render(); }\n  else if (act === \"cancelMatches\") { matchArmed = false; render(); }\n  else if (act === \"hideMatches\") { matches = null; matchArmed = false; render(); }\n  else if (act === \"showMatches\") {\n    if (!matchArmed) { matchArmed = true; render(); return; }\n    // Look each code up exactly as the reveal page does; the backend needs no change.\n    const done = busy(el, \"Loading…\", \"Laddar…\");\n    Promise.all(codes.map(c => api(\"reveal\", { code: c.code }).then(r => [c.name, r.to])))\n      .then(list => { matches = Object.fromEntries(list); flash = null; })\n      .catch(e => setFlash(\"err\", e.message, e.sv || \"\"))\n      .then(() => { done(); matchArmed = false; render(); });\n  }\n});\napp.addEventListener(\"submit\", ev => {\n  ev.preventDefault();\n  if (ev.target.id === \"askForm\") doAsk(document.getElementById(\"askBtn\"));\n  if (ev.target.id === \"revealForm\") doReveal(document.getElementById(\"revealBtn\"));\n  if (ev.target.id === \"unlockForm\") doUnlock(document.getElementById(\"unlockBtn\"));\n});\napp.addEventListener(\"input\", ev => {\n  if (ev.target.id === \"code\") { const v = fmtCode(ev.target.value); if (v !== ev.target.value) ev.target.value = v; }\n});\n\nstartSnow();\nrender();\nif (API) loadStatus();\n\n})();\n</script>\n<script>/* Festive background music: a music-box \"Jingle Bells\" (public domain) with soft bass and sleigh bells,\n   synthesised live with the Web Audio API, so there are no audio files and nothing to license.\n   Browsers only allow sound after the visitor touches the page, so it starts on the first tap\n   (unless they turned it off before) and the 🎵 button toggles it. */\n(function () {\n\"use strict\";\nconst KEY = \"ss-music\";\nconst pref = () => { try { return localStorage.getItem(KEY); } catch (e) { return null; } };\nconst setPref = v => { try { localStorage.setItem(KEY, v); } catch (e) {} };\nconst AC = window.AudioContext || window.webkitAudioContext;\nif (!AC) return;\n\nconst N = { C3:130.81, D3:146.83, F3:174.61, G3:196.00, A3:220.00, C4:261.63, D4:293.66,\n            C5:523.25, D5:587.33, E5:659.25, F5:698.46, G5:783.99 };\nconst L1 = [[\"E5\",1],[\"E5\",1],[\"E5\",2],[\"E5\",1],[\"E5\",1],[\"E5\",2],[\"E5\",1],[\"G5\",1],[\"C5\",1.5],[\"D5\",.5],[\"E5\",4]];\nconst L2 = [[\"F5\",1],[\"F5\",1],[\"F5\",1.5],[\"F5\",.5],[\"F5\",1],[\"E5\",1],[\"E5\",1],[\"E5\",.5],[\"E5\",.5],[\"E5\",1],[\"D5\",1],[\"D5\",1],[\"E5\",1],[\"D5\",2],[\"G5\",2]];\nconst L4 = [[\"F5\",1],[\"F5\",1],[\"F5\",1],[\"F5\",1],[\"F5\",1],[\"E5\",1],[\"E5\",1],[\"E5\",.5],[\"E5\",.5],[\"G5\",1],[\"G5\",1],[\"F5\",1],[\"D5\",1],[\"C5\",4]];\nconst MELODY = [].concat(L1, L2, L1, L4);                       // 64 beats\nconst BARS = [\"C\",\"C\",\"C\",\"C\",\"F\",\"C\",\"D\",\"G\",\"C\",\"C\",\"C\",\"C\",\"F\",\"C\",\"G\",\"C\"];\nconst BASS = { C:[\"C3\",\"G3\"], F:[\"F3\",\"C4\"], D:[\"D3\",\"A3\"], G:[\"G3\",\"D4\"] };\nconst BEAT = 60 / 116, LOOP_BEATS = 68;                         // 64 beats of tune + a short breath\n\nlet ctx = null, bus = null, noise = null, nextLoop = 0, timer = null, playing = false;\n\nfunction setup() {\n  if (ctx) return;\n  try { if (navigator.audioSession) navigator.audioSession.type = \"playback\"; } catch (e) {} // iOS: play even with the silent switch on\n  ctx = new AC();\n  const len = Math.floor(ctx.sampleRate * 0.25), buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);\n  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;\n  noise = buf;\n  document.addEventListener(\"visibilitychange\", () => {\n    if (!playing) return;\n    if (document.hidden) ctx.suspend(); else ctx.resume();\n  });\n}\n\nfunction bell(t, f, dur, vol) {\n  const g = ctx.createGain(), end = t + Math.max(0.6, dur * 1.6);\n  g.gain.setValueAtTime(0.0001, t);\n  g.gain.exponentialRampToValueAtTime(vol, t + 0.008);\n  g.gain.exponentialRampToValueAtTime(0.0001, end);\n  g.connect(bus);\n  [[1, 1], [2, 0.28], [3, 0.08]].forEach(([m, v]) => {\n    const o = ctx.createOscillator(), og = ctx.createGain();\n    o.type = \"sine\"; o.frequency.value = f * m; og.gain.value = v;\n    o.connect(og).connect(g); o.start(t); o.stop(end + 0.05);\n  });\n}\nfunction bass(t, f, vol) {\n  const o = ctx.createOscillator(), g = ctx.createGain(), end = t + BEAT * 1.8;\n  o.type = \"triangle\"; o.frequency.value = f;\n  g.gain.setValueAtTime(0.0001, t);\n  g.gain.exponentialRampToValueAtTime(vol, t + 0.02);\n  g.gain.exponentialRampToValueAtTime(0.0001, end);\n  o.connect(g).connect(bus); o.start(t); o.stop(end + 0.05);\n}\nfunction jingle(t, vol) {\n  const s = ctx.createBufferSource(), hp = ctx.createBiquadFilter(), g = ctx.createGain();\n  s.buffer = noise; hp.type = \"highpass\"; hp.frequency.value = 7000;\n  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);\n  s.connect(hp).connect(g).connect(bus); s.start(t); s.stop(t + 0.15);\n}\n\nfunction scheduleLoop(t0) {\n  let t = t0;\n  MELODY.forEach(([n, b]) => { bell(t, N[n], b * BEAT, 0.16); t += b * BEAT; });\n  BARS.forEach((ch, i) => {\n    const bt = t0 + i * 4 * BEAT;\n    bass(bt, N[BASS[ch][0]], 0.22); bass(bt + 2 * BEAT, N[BASS[ch][1]], 0.16);\n    for (let k = 0; k < 8; k++) jingle(bt + k * BEAT / 2, k % 2 ? 0.035 : 0.07);\n  });\n}\n\nfunction tick() {\n  if (ctx.currentTime > nextLoop - 3) { scheduleLoop(nextLoop); nextLoop += LOOP_BEATS * BEAT; }\n}\n\nfunction start() {\n  setup();\n  if (playing) return;\n  playing = true;\n  ctx.resume();\n  bus = ctx.createGain();\n  bus.gain.setValueAtTime(0.0001, ctx.currentTime);\n  bus.gain.exponentialRampToValueAtTime(0.5, ctx.currentTime + 1.2);\n  bus.connect(ctx.destination);\n  nextLoop = ctx.currentTime + 0.15;\n  tick(); timer = setInterval(tick, 500);\n  paint();\n}\nfunction stop() {\n  if (!playing) return;\n  playing = false;\n  clearInterval(timer);\n  const old = bus, t = ctx.currentTime;\n  old.gain.cancelScheduledValues(t); old.gain.setValueAtTime(old.gain.value, t); old.gain.linearRampToValueAtTime(0, t + 0.3);\n  setTimeout(() => { try { old.disconnect(); } catch (e) {} }, 400);\n  paint();\n}\n\n/* ---- the 🎵 button ---- */\nconst btn = document.createElement(\"button\");\nbtn.type = \"button\"; btn.id = \"musicBtn\";\nfunction paint() {\n  btn.setAttribute(\"aria-pressed\", playing ? \"true\" : \"false\");\n  btn.setAttribute(\"aria-label\", playing ? \"Turn music off / Stäng av musiken\" : \"Turn music on / Sätt på musiken\");\n  btn.title = playing ? \"Music off · Musik av\" : \"Music on · Musik på\";\n  btn.innerHTML = `<svg viewBox=\"0 0 24 24\" width=\"22\" height=\"22\" aria-hidden=\"true\"><path fill=\"currentColor\" d=\"M9 18.5a3 3 0 1 1-2-2.83V5.5l12-2.5v12.5a3 3 0 1 1-2-2.83V7.1l-8 1.67z\"/>${playing ? \"\" : '<path d=\"M3 3l18 18\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\"/>'}</svg>`;\n}\n/* Start on the first tap anywhere, unless the visitor switched it off before. */\nconst GESTURES = [\"click\", \"touchend\", \"keydown\"];\nconst unkick = () => GESTURES.forEach(e => document.removeEventListener(e, kick, true));\nfunction kick(ev) {\n  if (ev.target && ev.target.closest && ev.target.closest(\"#musicBtn\")) return;  // the button handles itself\n  unkick(); start();\n}\nif (pref() !== \"off\") GESTURES.forEach(e => document.addEventListener(e, kick, true));\n\nbtn.addEventListener(\"click\", () => { unkick(); if (playing) { stop(); setPref(\"off\"); } else { start(); setPref(\"on\"); } });\npaint();\ndocument.body.appendChild(btn);\n})();\n</script>";
+/* ==== END BACKUP PAGE ==== */
